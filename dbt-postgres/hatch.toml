@@ -12,11 +12,11 @@ pre-install-commands = [
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "ddtrace==2.3.0",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@1.latest#subdirectory=core",
+    "ddtrace>=2.3.0,<3.18",
     "pre-commit==3.7.0",
     "freezegun",
-    "pytest>=7.0,<8.0",
+    "pytest>=7.0,<10",
     "pytest-dotenv",
     "pytest-mock",
     "pytest-xdist",
@@ -67,10 +67,10 @@ pre-install-commands = [
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "ddtrace==2.3.0",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@1.latest#subdirectory=core",
+    "ddtrace>=2.3.0,<3.18",
     "freezegun",
-    "pytest>=7.0,<8.0",
+    "pytest>=7.0,<10",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -82,9 +82,9 @@ integration-tests = "python -m pytest tests/functional --ddtrace"
 pre-install-commands = []
 dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
-    "ddtrace==2.3.0",
+    "ddtrace>=2.3.0,<3.18",
     "freezegun",
-    "pytest>=7.0,<8.0",
+    "pytest>=7.0,<10",
     "pytest-mock",
     "pytest-xdist",
 ]

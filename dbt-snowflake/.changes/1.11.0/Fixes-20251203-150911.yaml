@@ -1,6 +1,0 @@
-kind: Fixes
-body: Preserve collation when altering a column size
-time: 2025-12-03T15:09:11.373622-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1258"

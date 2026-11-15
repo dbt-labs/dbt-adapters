@@ -4,8 +4,11 @@ import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsBase,
     BasePersistDocs,
+    BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 from dbt.tests.adapter.persist_docs import fixtures as persist_docs_fixtures
 
@@ -142,7 +145,7 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": persist_docs_fixtures._PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": persist_docs_fixtures._PROPERTIES__SCHEMA_MISSING_COL}
 
     def test_missing_column(self, project):
         _, logs = run_dbt_and_capture(["run"])
@@ -397,3 +400,17 @@ models:
 
             assert id_field.description == "Updated id description"
             assert name_field.description == "Updated name description"
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
+    pass

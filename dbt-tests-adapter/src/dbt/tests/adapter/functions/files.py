@@ -173,3 +173,37 @@ functions:
       data_type: float
       description: The square root of the input
 """.strip()
+
+
+# --- JavaScript UDF fixtures (shared body strings) ---
+# YAML configs stay in adapter-specific files.py due to differing data types.
+
+MY_JS_UDF = """
+return price * 2;
+""".strip()
+
+MASK_PII_JS = """
+if (value === null || value === undefined) {
+    return null;
+}
+var masked = value.substring(0, 2);
+for (var i = 2; i < value.length; i++) {
+    masked += '*';
+}
+return masked;
+""".strip()
+
+SUM_POSITIVE_JS = """
+export function initialState() {
+  return {sum: 0}
+}
+export function aggregate(state, x) {
+  if (x > 0) { state.sum += x; }
+}
+export function merge(state, partialState) {
+  state.sum += partialState.sum;
+}
+export function finalize(state) {
+  return state.sum;
+}
+""".strip()

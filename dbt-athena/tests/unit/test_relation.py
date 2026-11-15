@@ -21,6 +21,16 @@ class TestRelation:
                 },
                 TableType.ICEBERG,
             ),
+            # S3 Tables tables report a "customer" TableType that is not in RELATION_TYPE_MAP.
+            # The iceberg `table_type` parameter must take precedence so they classify correctly.
+            (
+                {
+                    "Name": "n",
+                    "TableType": "customer",
+                    "Parameters": {"table_type": "ICEBERG"},
+                },
+                TableType.ICEBERG,
+            ),
         ],
     )
     def test__get_relation_type(self, table, expected):

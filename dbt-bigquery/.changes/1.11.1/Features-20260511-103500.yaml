@@ -1,0 +1,6 @@
+kind: Features
+body: Add bridge_v2_catalog support via _v2_to_v1_type and Capability.CatalogsV2
+time: 2026-05-11T10:35:00.000000+00:00
+custom:
+  Author: aahel
+  Issue: "1920"

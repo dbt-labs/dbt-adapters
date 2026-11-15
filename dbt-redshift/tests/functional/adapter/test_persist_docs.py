@@ -5,10 +5,13 @@ from dbt.tests.adapter.materialized_view import files
 from dbt.tests.util import run_dbt
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsBase,
     BasePersistDocs,
     BasePersistDocsColumnMissing,
     BasePersistDocsCommentOnQuotedColumn,
+    BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 
 _MATERIALIZED_VIEW_PROPERTIES__SCHEMA_YML = """
@@ -28,18 +31,62 @@ models:
 
 
 class TestPersistDocs(BasePersistDocs):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsLateBinding(BasePersistDocsBase):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -74,6 +121,12 @@ class TestPersistDocsLateBinding(BasePersistDocsBase):
 
 
 class TestPersistDocsWithMaterializedView(BasePersistDocs):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
         return {"my_seed.csv": files.MY_SEED}

@@ -6,6 +6,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     ErrorForUnsupportedType,
     PythonUDFNotSupported,
     SqlUDFDefaultArgSupport,
+    CanFindScalarFunctionRelation,
 )
 
 
@@ -35,3 +36,7 @@ class TestPostgresPythonUDFNotSupported(PythonUDFNotSupported):
 
 class TestPostgresDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
     expect_default_arg_support = True
+
+
+class TestPostgresCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
+    pass

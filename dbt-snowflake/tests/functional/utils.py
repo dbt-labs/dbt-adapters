@@ -1,13 +1,43 @@
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, List, Optional
 
 from dbt.tests.util import (
     get_connection,
     get_model_file,
     relation_from_name,
+    run_dbt,
     set_model_file,
 )
+from dbt_common.exceptions import DbtDatabaseError
 
-from dbt.adapters.snowflake.relation_configs import SnowflakeDynamicTableConfig
+from dbt.adapters.snowflake.relation_configs import (
+    SnowflakeDynamicTableConfig,
+    SnowflakeInteractiveTableConfig,
+)
+
+# "An unexpected service error occurred while committing to the external catalog", which the
+# Open Catalog test integration returns intermittently when dbt creates a schema in its
+# catalog-linked database
+EXTERNAL_CATALOG_COMMIT_ERROR = "004512"
+
+
+def run_dbt_retrying_external_catalog_errors(
+    args: List[str], attempts: int = 5, wait_seconds: int = 10
+):
+    """
+    run_dbt, retried when the external catalog fails a commit with EXTERNAL_CATALOG_COMMIT_ERROR.
+
+    run_dbt raises this only from steps before any model runs, such as creating schemas, so
+    running the command again is safe. Model failures don't raise and aren't retried.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return run_dbt(args)
+        except DbtDatabaseError as e:
+            if EXTERNAL_CATALOG_COMMIT_ERROR not in str(e) or attempt == attempts:
+                raise
+            print(f"External catalog commit failed (attempt {attempt}/{attempts}), retrying")
+            time.sleep(wait_seconds)
 
 
 def query_change_tracking_from_show_tables(project, name: str) -> str:
@@ -56,8 +86,11 @@ def query_change_tracking_from_show_tables(project, name: str) -> str:
 def query_relation_type(project, name: str) -> Optional[str]:
     relation = relation_from_name(project.adapter, name)
     sql = f"""
+        -- INFORMATION_SCHEMA.TABLES reports TABLE_TYPE = 'INTERACTIVE TABLE' for BOTH static and
+        -- dynamic interactive tables (IS_DYNAMIC varies but doesn't affect the relation_type here).
         select
             case table_type
+                when 'INTERACTIVE TABLE' then 'interactive_table'
                 when 'BASE TABLE' then iff(is_dynamic = 'YES', 'dynamic_table', 'table')
                 when 'VIEW' then 'view'
                 when 'EXTERNAL TABLE' then 'external_table'
@@ -111,6 +144,23 @@ def describe_dynamic_table(project, name: str) -> Optional[SnowflakeDynamicTable
     assert found == 1, f"Multiple dynamic tables found: {names}"
 
     return SnowflakeDynamicTableConfig.from_relation_results(results)
+
+
+def describe_interactive_table(project, name: str) -> Optional[SnowflakeInteractiveTableConfig]:
+    macro = "snowflake__describe_interactive_table"
+    interactive_table = relation_from_name(project.adapter, name)
+    kwargs = {"relation": interactive_table}
+    with get_connection(project.adapter):
+        results = project.adapter.execute_macro(macro, kwargs=kwargs)
+
+    assert (
+        len(results["interactive_table"].rows) > 0
+    ), f"Interactive table {interactive_table} not found"
+    found = len(results["interactive_table"].rows)
+    names = ", ".join([table.get("name") for table in results["interactive_table"].rows])
+    assert found == 1, f"Multiple interactive tables found: {names}"
+
+    return SnowflakeInteractiveTableConfig.from_relation_results(results)
 
 
 def query_transient_status(project, name: str) -> bool:

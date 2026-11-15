@@ -1,14 +1,20 @@
 blank_issues_enabled: false
 contact_links:
+-   name: 🐞 Bug (dbt v2.x adapters)
+    url: https://github.com/dbt-labs/dbt/issues/new?template=bug-report-v2.yml
+    about: Report a bug or issue you've found in a dbt v2.x adapter (Core or Fusion distributions)
+-   name: ✨ Feature request (dbt v2.x only)
+    url: https://github.com/dbt-labs/dbt/issues/new?template=feature-request.yml
+    about: We're no longer accepting feature requests for dbt v1.x adapters. Propose new adapter features for dbt v2.x in dbt-labs/dbt.
+-   name: Other dbt issues
+    url: https://github.com/dbt-labs/dbt/issues/new/choose
+    about: dbt Core v1.x bugs, VS Code extension, SQL understanding, docs, and anything else that isn't adapter-specific
+-   name: Participate in Discussions
+    url: https://github.com/dbt-labs/dbt-adapters/discussions
+    about: Have a Big Idea for dbt v2.x adapters or the dbt v1.x adapters in this repo? Read open discussions, or start a new one
 -   name: Ask the community for help
     url: https://github.com/dbt-labs/docs.getdbt.com/discussions
     about: Need help troubleshooting? Check out our guide on how to ask
 -   name: Contact dbt Cloud support
     url: mailto:support@getdbt.com
     about: Are you using dbt Cloud? Contact our support team for help!
--   name: Participate in Discussions
-    url: https://github.com/dbt-labs/dbt-adapters/discussions
-    about: Do you have a Big Idea for dbt-adapters or one of the adapter implementations? Read open discussions, or start a new one
--   name: Create an issue for dbt-core
-    url: https://github.com/dbt-labs/dbt-core/issues/new/choose
-    about: Report a bug or request a feature for dbt-core

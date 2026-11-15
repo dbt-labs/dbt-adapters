@@ -38,6 +38,8 @@ from snowflake.connector.errors import (
     BindUploadError,
 )
 
+from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
+
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -82,10 +84,40 @@ else:
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
+ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
+
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
 }
+
+# The statements dbt issues, with snowflake_fail_on_unexpected_existing_relation enabled, for an
+# incremental model or snapshot whose table is not in the relation cache: a CTAS without OR
+# REPLACE, or for Python models a Snowpark write in errorifexists mode.
+_LEADING_SQL_COMMENTS = re.compile(r"^\s*(?:/\*.*?\*/\s*|--[^\r\n]*\s*)*", re.DOTALL)
+_CREATE_TABLE_AS_WITHOUT_REPLACE = re.compile(
+    r"create\s+(?:transient\s+|iceberg\s+)?table\s+(?!if\s+not\s+exists\b)\S.*?\bas\s*\(",
+    re.IGNORECASE | re.DOTALL,
+)
+_WRITE_MODE_ERROR_IF_EXISTS = 'mode("errorifexists")'
+
+UNEXPECTED_EXISTING_RELATION_HINT = (
+    "The table was not in dbt's relation cache, so dbt used CREATE instead of CREATE OR REPLACE "
+    "to avoid replacing existing data. To replace it, drop the table or run an incremental model "
+    "with --full-refresh. To restore the previous behavior, set the "
+    "`snowflake_fail_on_unexpected_existing_relation` flag to False."
+)
+
+
+def _is_unexpected_existing_relation_error(msg: str, sql: Optional[str]) -> bool:
+    """Whether a CREATE that dbt issued without OR REPLACE failed because the table exists."""
+    if "002002" not in msg or "already exists" not in msg:
+        return False
+    sql = sql or ""
+    if _WRITE_MODE_ERROR_IF_EXISTS in msg or _WRITE_MODE_ERROR_IF_EXISTS in sql:
+        return True
+    statement = _LEADING_SQL_COMMENTS.sub("", sql, count=1)
+    return _CREATE_TABLE_AS_WITHOUT_REPLACE.match(statement) is not None
 
 
 @cache
@@ -123,12 +155,18 @@ class SnowflakeCredentials(Credentials):
     retry_on_database_errors: bool = False
     retry_all: bool = False
     insecure_mode: Optional[bool] = False
+    # connector default before 4.8; passed explicitly to keep behavior stable across versions
+    ocsp_fail_open: bool = True
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    workload_identity_provider: Optional[str] = None
+    workload_identity_entra_resource: Optional[str] = None
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
-    platform_detection_timeout_seconds: float = 0.0
+    platform_detection_timeout_seconds: Optional[float] = (
+        None if workload_identity_provider else 0.0
+    )
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -139,19 +177,26 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]:
+        # workload_identity is matched case-insensitively to mirror auth_args(); the
+        # other authenticators stay case-sensitive to preserve existing behavior
+        is_workload_identity = (self.authenticator or "").lower() == "workload_identity"
+        if (
+            self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]
+            and not is_workload_identity
+        ):
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
                         base_msg=(
-                            "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth', 'jwt', or 'programmatic_access_token'."
+                            "The token parameter was set, but the authenticator was not set "
+                            "to 'oauth', 'jwt', 'programmatic_access_token', or 'workload_identity'."
                         )
                     )
                 )
 
             if not self.user:
-                # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
+                # The user attribute is only optional if 'authenticator' is
+                # 'jwt', 'oauth', 'programmatic_access_token', or 'workload_identity'
                 warn_or_error(
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
@@ -199,8 +244,11 @@ class SnowflakeCredentials(Credentials):
             "retry_on_database_errors",
             "retry_all",
             "insecure_mode",
+            "ocsp_fail_open",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "workload_identity_provider",
+            "workload_identity_entra_resource",
             "platform_detection_timeout_seconds",
         )
 
@@ -258,11 +306,43 @@ class SnowflakeCredentials(Credentials):
                 # PAT auth natively since snowflake-connector-python v3.12.0.
                 result["token"] = self.token
 
+            elif self.authenticator.lower() == "workload_identity":
+                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+
+                if (
+                    not self.workload_identity_provider
+                    or self.workload_identity_provider.upper()
+                    not in ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS
+                ):
+
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n"
+                        f"{', '.join(ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS)}\n\n"
+                        f"Provided workload_identity_provider was '{self.workload_identity_provider}'"
+                    )
+
+                result["workload_identity_provider"] = self.workload_identity_provider
+
+                if self.token:
+                    result["token"] = self.token
+
+                if self.workload_identity_entra_resource:
+                    if self.workload_identity_provider.upper() != "AZURE":
+                        raise DbtConfigError(
+                            "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+                        )
+
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
+
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
             # enable mfa token cache for linux
             result["client_request_mfa_token"] = True
-        result["reuse_connections"] = self.reuse_connections
+        # `reuse_connections` is not passed: it is dbt's own pooling switch (see
+        # `SnowflakeConnectionManager.release`), not a connector option. Connector 5.x
+        # warns about unknown options, and rejects them outright when they are None.
         result["private_key"] = self._get_private_key()
         return result
 
@@ -368,6 +448,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                         "Please double check your profile and try again."
                     ).format(msg)
                 )
+            elif _is_unexpected_existing_relation_error(msg, sql):
+                raise DbtDatabaseError("{}\n\n{}".format(msg, UNEXPECTED_EXISTING_RELATION_HINT))
             else:
                 raise DbtDatabaseError(msg)
         except Exception as e:
@@ -419,6 +501,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
+                    ocsp_fail_open=creds.ocsp_fail_open,
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
                     ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213

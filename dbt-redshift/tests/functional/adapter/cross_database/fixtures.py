@@ -36,3 +36,22 @@ class CrossDatabaseMixin:
         outputs = {"default": dbt_profile_target}
         outputs["default"]["datasharing"] = True
         return outputs
+
+    @pytest.fixture(scope="class", autouse=True)
+    def _cleanup_cross_db_schema(self, project_setup):
+        """Drop the test schema in the cross-database after the test class.
+
+        The framework's teardown only drops the test schema in the default
+        (profile) database. Because these tests target models at
+        REDSHIFT_TEST_CROSS_DBNAME via ``+database``, dbt creates the schema
+        there too, and it would otherwise leak. This runs before the
+        framework teardown (it depends on ``project_setup``).
+        """
+        yield
+        adapter = project_setup.adapter
+        with get_connection(adapter):
+            relation = adapter.Relation.create(
+                database=REDSHIFT_TEST_CROSS_DBNAME,
+                schema=project_setup.test_schema,
+            )
+            adapter.drop_schema(relation)

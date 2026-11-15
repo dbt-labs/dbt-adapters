@@ -1,0 +1,13 @@
+kind: Breaking Changes
+body: >-
+  Enable `bigquery_use_standard_sql_for_partitions` by default, switching partition metadata queries
+  from Legacy SQL (`$__PARTITIONS_SUMMARY__`) to Standard SQL (`INFORMATION_SCHEMA.PARTITIONS`) ahead
+  of BigQuery's Legacy SQL deprecation on June 1, 2026. This may require IAM permission updates
+  (`bigquery.tables.get` + `bigquery.tables.list` instead of `bigquery.tables.getData`) for users
+  with custom roles, and custom macros that access columns beyond `partition_id` from
+  `get_partitions_metadata()` will need updating. Users can revert to Legacy SQL by setting
+  `flags.bigquery_use_standard_sql_for_partitions: false` in `dbt_project.yml`.
+time: 2026-05-19T08:50:00.000000-07:00
+custom:
+  Author: aahel
+  Issue: "1725"

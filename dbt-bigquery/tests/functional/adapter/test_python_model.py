@@ -1,6 +1,7 @@
 import os
 import pytest
 import time
+import uuid
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 import dbt.tests.adapter.python_model.test_python_model as dbt_tests
 
@@ -41,6 +42,7 @@ class TestPythonModelDataproc(dbt_tests.BasePythonModelTests):
 
 
 @pytest.mark.skip(reason=TEST_SKIP_MESSAGE)
+@pytest.mark.flaky
 class TestPythonIncrementalMatsDataproc(dbt_tests.BasePythonIncrementalTests):
     pass
 
@@ -109,15 +111,17 @@ def model(dbt, spark):
     return final_df
 """
 
-models__partitioned_model_yaml = """
+
+def _partitioned_model_yaml(batch_id: str) -> str:
+    return f"""
 models:
   - name: python_partitioned_model
     description: A random table with a calculated column defined in python.
     config:
-      batch_id: '{{ run_started_at.strftime("%Y-%m-%d-%H-%M-%S") }}-python-partitioned'
+      batch_id: {batch_id}-python-partitioned
     tests:
       - number_partitions:
-          expected: "{{ var('expected', 1) }}"
+          expected: "{{{{ var('expected', 1) }}}}"
     columns:
       - name: A
         description: Column A
@@ -138,10 +142,17 @@ class TestPythonPartitionedModels:
     def models(self):
         return {
             "python_partitioned_model.py": models__partitioned_model_python,
-            "python_partitioned_model.yml": models__partitioned_model_yaml,
+            "python_partitioned_model.yml": _partitioned_model_yaml("placeholder"),
         }
 
     def test_multiple_named_python_models(self, project):
+        # Unique batch id per invocation so flaky reruns / parallel shards never reuse one.
+        batch_id = f"custom-{uuid.uuid4().hex}"
+        write_file(
+            _partitioned_model_yaml(batch_id),
+            project.project_root + "/models",
+            "python_partitioned_model.yml",
+        )
         result = run_dbt(["run"])
         assert len(result) == 1
 
@@ -199,14 +210,14 @@ models:
         description: Column C
 """
 
-custom_ts_id = str("custom-" + str(time.time()).replace(".", "-"))
 
-models__bad_python_array_batch_id_yaml = f"""
+def _python_array_batch_id_yaml(batch_id: str) -> str:
+    return f"""
 models:
   - name: python_array_batch_id
     description: A random table with a calculated column defined in python.
     config:
-      batch_id: {custom_ts_id}-python-array
+      batch_id: {batch_id}-python-array
     columns:
       - name: A
         description: Column A
@@ -240,10 +251,18 @@ class TestPythonDuplicateBatchIdModels:
     def models(self):
         return {
             "python_array_batch_id.py": models__python_array_batch_id_python,
-            "python_array_batch_id.yml": models__bad_python_array_batch_id_yaml,
+            "python_array_batch_id.yml": models__python_array_batch_id_yaml,
         }
 
     def test_multiple_python_models_fixed_id(self, project):
+        # Unique id per invocation, but shared across run #1 and #2 so the second run
+        # still gets the expected 409 — without colliding with a prior attempt's batch.
+        batch_id = f"custom-{uuid.uuid4().hex}"
+        write_file(
+            _python_array_batch_id_yaml(batch_id),
+            project.project_root + "/models",
+            "python_array_batch_id.yml",
+        )
         result, output = run_dbt_and_capture(["run"], expect_pass=True)
         result_two, output_two = run_dbt_and_capture(["run"], expect_pass=False)
         assert result_two[0].message.startswith("409 Already exists: Failed to create batch:")
@@ -252,6 +271,7 @@ class TestPythonDuplicateBatchIdModels:
 
 
 @pytest.mark.skip(reason=TEST_SKIP_MESSAGE)
+@pytest.mark.flaky
 class TestChangingSchemaDataproc:
     @pytest.fixture(scope="class")
     def models(self):
@@ -274,14 +294,17 @@ class TestChangingSchemaDataproc:
             assert "Execution status: OK in" in log
 
 
+@pytest.mark.flaky
 class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
     pass
 
 
+@pytest.mark.flaky
 class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
     pass
 
 
+@pytest.mark.flaky
 class TestPythonMetaGetBigquery(dbt_tests.BasePythonMetaGetTests):
     pass
 

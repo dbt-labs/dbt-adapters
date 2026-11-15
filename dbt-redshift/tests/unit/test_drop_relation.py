@@ -100,6 +100,17 @@ class TestDropRelationLock(TestCase):
         )
 
 
+class TestDropWithoutCascade(TestCase):
+
+    def test_default_false(self):
+        adapter = make_adapter()
+        self.assertFalse(adapter.drop_without_cascade())
+
+    def test_credential_true(self):
+        adapter = make_adapter({"drop_without_cascade": True})
+        self.assertTrue(adapter.drop_without_cascade())
+
+
 class TestFreshTransactionRetryResilience(TestCase):
     """Regression test for GitHub issue #1698.
 

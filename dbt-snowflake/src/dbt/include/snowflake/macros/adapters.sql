@@ -95,6 +95,8 @@
 {% macro snowflake__alter_relation_comment(relation, relation_comment) -%}
     {%- if relation.is_dynamic_table -%}
         {%- set relation_type = 'dynamic table' -%}
+    {%- elif relation.is_interactive_table -%}
+        {%- set relation_type = 'table' -%}
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
@@ -107,16 +109,33 @@
 {% endmacro %}
 
 
+{% macro snowflake__persist_docs(relation, model, for_relation, for_columns) -%}
+  {% if for_relation and config.persist_relation_docs() and model.description %}
+    {% do run_query(alter_relation_comment(relation, model.description)) %}
+  {% endif %}
+
+  {% if for_columns and config.persist_column_docs() and model.columns %}
+    {% set alter_comment_sql = alter_column_comment(relation, model.columns) %}
+    {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
+      {% do run_query(alter_comment_sql) %}
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+
 {% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% set filtered_column_dict = validate_doc_columns(relation, column_dict, existing_columns) %}
     {% if relation.is_dynamic_table -%}
+        {% set relation_type = "table" %}
+    {% elif relation.is_interactive_table -%}
         {% set relation_type = "table" %}
     {% else -%}
         {% set relation_type = relation.type %}
     {% endif %}
     alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} alter
     {% for column_name in existing_columns if (column_name in existing_columns) or (column_name|lower in existing_columns) %}
-        {{ get_column_comment_sql(column_name, column_dict) }} {{- ',' if not loop.last else ';' }}
+        {{ get_column_comment_sql(column_name, filtered_column_dict) }} {{- ',' if not loop.last else ';' }}
     {% endfor %}
 {% endmacro %}
 
@@ -193,10 +212,20 @@
 
 {% macro snowflake__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
-    {% if relation.is_dynamic_table -%}
+    {#- Interactive tables ALTER as plain TABLEs; only dynamic tables use ALTER DYNAMIC TABLE. -#}
+    {% if relation.is_interactive_table -%}
+        {% set relation_type = "table" %}
+    {% elif relation.is_dynamic_table -%}
         {% set relation_type = "dynamic table" %}
     {% else -%}
         {% set relation_type = relation.type %}
+    {% endif %}
+
+    {#- Snowflake's ALTER TABLE reference doesn't list ADD/DROP COLUMN as supported for interactive
+        tables. Live-verified: ADD COLUMN works anyway (undocumented); DROP COLUMN is rejected with
+        `010406: Altering interactive tables is not supported.` -#}
+    {% if relation.is_interactive_table and remove_columns %}
+        {% do exceptions.raise_compiler_error("Columns cannot be removed from an interactive table: `" ~ relation ~ "`.") %}
     {% endif %}
 
     {% if add_columns %}

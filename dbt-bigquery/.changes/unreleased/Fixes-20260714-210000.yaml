@@ -1,0 +1,6 @@
+kind: Fixes
+body: Check for model catalog_name defensively
+time: 2026-07-14T21:00:00.837615+05:30
+custom:
+    Author: ash2shukla
+    Issue: "2004"

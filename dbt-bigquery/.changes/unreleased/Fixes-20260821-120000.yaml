@@ -1,0 +1,9 @@
+kind: Fixes
+body: Restore partition elimination for insert_overwrite on int64 range partitioned
+    tables with an interval of 1. The partition column is no longer wrapped in `MOD()`
+    arithmetic, which BigQuery cannot use as a partition filter and which tables
+    configured with `require_partition_filter=true` reject outright.
+time: 2026-08-21T12:00:00.000000+00:00
+custom:
+    Author: tauhid621
+    Issue: "2121"

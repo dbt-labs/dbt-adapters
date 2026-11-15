@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from dbt.adapters.events.logging import AdapterLogger
 
 DEFAULT_THREAD_COUNT = 4
@@ -39,3 +41,41 @@ DEFAULT_SPARK_PROPERTIES = {
 }
 
 LOGGER = AdapterLogger(__name__)
+
+# Catalog integration (catalogs.yml v2) constants
+ICEBERG_TABLE_FORMAT = "iceberg"
+HIVE_TABLE_FORMAT = "hive"
+PARQUET_FILE_FORMAT = "parquet"
+GLUE_CATALOG_TYPE = "glue"
+INFO_SCHEMA_CATALOG_TYPE = "info_schema"
+S3_TABLES_CATALOG_TYPE = "s3_tables"
+
+# The Glue federated catalog name prefix AWS assigns to S3 Tables buckets. In Athena/Glue
+# an S3 Tables bucket is addressed as "s3tablescatalog/<bucket-name>" (dbt `database`).
+# Distinct from S3_TABLES_CATALOG_TYPE, which is the dbt catalogs.yml `type` value.
+S3_TABLES_GLUE_CATALOG_PREFIX = "s3tablescatalog"
+
+# Default catalog registered for every model that does not reference a catalog.
+# Maps to Athena's standard Hive table_type.
+DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
+    name="info_schema",
+    catalog_name="info_schema",
+    catalog_type=INFO_SCHEMA_CATALOG_TYPE,
+    table_format=HIVE_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
+    adapter_properties={},
+)
+
+# Default writable Iceberg catalog backed by the AWS Glue Data Catalog.
+DEFAULT_GLUE_CATALOG = SimpleNamespace(
+    name="glue",
+    catalog_name="glue",
+    catalog_type=GLUE_CATALOG_TYPE,
+    table_format=ICEBERG_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
+    adapter_properties={},
+)

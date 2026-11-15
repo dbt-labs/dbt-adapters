@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for the Snowflake COPY TAGS parameter in CREATE OR REPLACE TABLE, clone operations, and built-in Iceberg table creation
+time: 2026-04-13T12:00:00.000000+00:00
+custom:
+  Author: yostrinsky
+  Issue: "1857"

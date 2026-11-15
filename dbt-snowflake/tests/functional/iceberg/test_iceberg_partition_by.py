@@ -7,6 +7,8 @@ from dbt.tests.adapter.catalog_integrations.test_catalog_integration import (
 )
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
+from tests.functional.utils import run_dbt_retrying_external_catalog_errors
+
 
 def get_cleaned_model_ddl_from_file(file_name: str) -> str:
     with open(f"target/run/test/models/{file_name}", "r") as ddl_file:
@@ -244,7 +246,7 @@ class TestPartitionByIcebergRestCatalog(TestIcebergPartitionBy):
         }
 
     def test_partition_by_iceberg_rest_catalog(self, project, setup_class):
-        run_dbt(["run"])
+        run_dbt_retrying_external_catalog_errors(["run"])
         iceberg_sql = get_cleaned_model_ddl_from_file("rest_table.sql")
         assert "partition by (order_date)" in iceberg_sql
 

@@ -46,9 +46,8 @@ def adapter(mocker):
     mock_config.flags = {}
     mock_mp_context = mocker.MagicMock()
     a = RedshiftAdapter(mock_config, mock_mp_context)
-    # Explicit defaults: extended off, show_apis off.  Individual test classes override as needed.
+    # Explicit defaults: extended off, datasharing off.  Individual test classes override as needed.
     a.behavior.redshift_grants_extended = mocker.MagicMock(no_warn=False)
-    a.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=False)
     return a
 
 
@@ -58,7 +57,6 @@ class TestStandardizeGrantsDictShowApi:
     @pytest.fixture(autouse=True)
     def set_flags(self, adapter, mocker):
         adapter.behavior.redshift_grants_extended = mocker.MagicMock(no_warn=True)
-        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=True)
         adapter.config.credentials.datasharing = True
 
     def test_includes_all_privileges(self, adapter):
@@ -320,7 +318,6 @@ class TestStandardizeGrantsDictSvv:
     @pytest.fixture(autouse=True)
     def set_flags(self, adapter, mocker):
         adapter.behavior.redshift_grants_extended = mocker.MagicMock(no_warn=True)
-        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=False)
         adapter.config.credentials.datasharing = False
 
     def test_distinguishes_users_groups_roles(self, adapter):
@@ -389,7 +386,6 @@ class TestStandardizeGrantsDictLegacyNoShowApis:
     @pytest.fixture(autouse=True)
     def set_flags(self, adapter, mocker):
         adapter.behavior.redshift_grants_extended = mocker.MagicMock(no_warn=False)
-        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=False)
         adapter.config.credentials.datasharing = False
 
     def test_returns_plain_names(self, adapter):
@@ -423,7 +419,6 @@ class TestStandardizeGrantsDictLegacyWithShowApis:
     @pytest.fixture(autouse=True)
     def set_flags(self, adapter, mocker):
         adapter.behavior.redshift_grants_extended = mocker.MagicMock(no_warn=False)
-        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=True)
         adapter.config.credentials.datasharing = True
 
     def test_returns_plain_identity_names(self, adapter):

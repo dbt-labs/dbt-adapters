@@ -1,18 +1,39 @@
+import json
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Mapping,
+    Any,
+    Optional,
+    List,
+    Union,
+    Dict,
+    FrozenSet,
+    Tuple,
+)
 
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+    CatalogRelation,
+)
+
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.exceptions import ApproximateMatchError
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
 )
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
@@ -25,15 +46,20 @@ from dbt_common.contracts.metadata import (
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
+from dbt_common.record import auto_record_function
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
+
+if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
     InfoSchemaCatalogIntegration,
     IcebergRestCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
+from dbt.adapters.snowflake.relation_configs.interactive_table import INTERACTIVE_TABLE_COLUMNS
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -42,6 +68,13 @@ from dbt.adapters.snowflake import SnowflakeRelation
 import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+
+def _sql_literal(value: Optional[str]) -> str:
+    """Escape a value for interpolation into a single-quoted SQL literal. An
+    unescaped `'` terminates the literal early and leaves the rest as stray SQL."""
+    return (value or "").replace("'", "''")
+
 
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
@@ -52,6 +85,34 @@ SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
+    name="snowflake_managed_iceberg_default",
+    default=False,
+    description=(
+        "When enabled, Iceberg tables without an explicit external_volume emit "
+        "external_volume = 'SNOWFLAKE_MANAGED' and suppress base_location, enabling "
+        "Snowflake Horizon managed storage out of the box. When disabled (default), no "
+        "external_volume clause is emitted and Snowflake resolves the schema or account default."
+    ),
+)
+
+SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION = BehaviorFlag(
+    name="snowflake_fail_on_unexpected_existing_relation",
+    default=True,
+    description=(
+        "When enabled (the default), incremental models and snapshots that are not in dbt's "
+        "relation cache are created with CREATE instead of CREATE OR REPLACE. If the table "
+        "exists anyway (for example, the metadata listing that populated the cache was "
+        "incomplete, or the table was created concurrently), the statement fails instead of "
+        "silently replacing the existing table and its data. Disabling this flag restores the "
+        "previous behavior, which can replace existing tables without warning."
+    ),
+)
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
+
 
 @dataclass
 class SnowflakeConfig(AdapterConfig):
@@ -61,6 +122,7 @@ class SnowflakeConfig(AdapterConfig):
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
+    copy_tags: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
     refresh_warehouse: Optional[str] = None
@@ -108,17 +170,55 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
             Capability.GetCatalogForSingleRelation: CapabilitySupport(support=Support.Full),
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
 
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "horizon": "BUILT_IN",
+        "glue": "ICEBERG_REST",
+        "iceberg_rest": "ICEBERG_REST",
+        "unity": "ICEBERG_REST",
+    }
+    _LINKED_FIELD_MAP: ClassVar[Dict[str, str]] = {
+        "catalog_database": "catalog_linked_database",
+    }
+    _LINKED_DB_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": "glue",
+        "unity": "unity",
+    }
+
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+        self._case_insensitive_databases: Dict[str, bool] = {}
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        return catalog.table_format.value.upper()
+
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
+        is_linked = catalog_type in ("glue", "iceberg_rest", "unity")
+        if is_linked:
+            props = {self._LINKED_FIELD_MAP.get(k, k): v for k, v in props.items()}
+            if catalog_type in self._LINKED_DB_TYPE:
+                props["catalog_linked_database_type"] = self._LINKED_DB_TYPE[catalog_type]
+        return props
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -177,6 +277,51 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
+    def _make_match(
+        self,
+        relations_list: List[BaseRelation],
+        database: str,
+        schema: str,
+        identifier: str,
+    ) -> List[BaseRelation]:
+        try:
+            return super()._make_match(relations_list, database, schema, identifier)
+        except ApproximateMatchError as exc:
+            # A catalog-linked database in CASE_INSENSITIVE mode stores names in lowercase and
+            # resolves unquoted names case-insensitively, so dbt's uppercased search name and
+            # the lowercase name from SHOW OBJECTS refer to the same object.
+            if not self._is_case_insensitive_catalog_linked_database(exc.relation.database):
+                raise
+
+        search = self._make_match_kwargs(database, schema, identifier)
+        return [
+            relation
+            for relation in relations_list
+            if all(
+                str(relation.path.get_lowered_part(part)) == value.lower()
+                for part, value in search.items()
+            )
+        ]
+
+    def _is_case_insensitive_catalog_linked_database(self, database: Optional[str]) -> bool:
+        if not database:
+            return False
+        if database not in self._case_insensitive_databases:
+            sql = (
+                "select system$get_catalog_linked_database_config("
+                f"'{_sql_literal(self.quote(database))}')"
+            )
+            try:
+                _, table = self.execute(sql, fetch=True)
+                config = json.loads(table[0][0])
+            except (DbtDatabaseError, ValueError, TypeError, IndexError):
+                # 001006: not a catalog-linked database
+                config = {}
+            self._case_insensitive_databases[database] = (
+                str(config.get("catalog_case_sensitivity", "")).upper() == "CASE_INSENSITIVE"
+            )
+        return self._case_insensitive_databases[database]
+
     def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
@@ -223,6 +368,27 @@ class SnowflakeAdapter(SQLAdapter):
             else:
                 raise
 
+    @auto_record_function("AdapterGetColumnSchemaFromQuery", group="Available")
+    @available.parse(lambda *a, **k: [])
+    def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
+        """Get a list of the Columns with names and data types from the given sql.
+
+        FIXED (NUMBER/DECIMAL) columns also carry their precision and scale, so DDL built
+        from them keeps the declared type. dtype stays FIXED, which contracts compare on.
+        """
+        _, cursor = self.connections.add_select_query(sql)
+        columns = []
+        # https://peps.python.org/pep-0249/#description
+        for column_name, column_type_code, _, _, precision, scale, *_ in cursor.description:
+            column = self.Column.create(
+                column_name, self.connections.data_type_code_to_name(column_type_code)
+            )
+            if column.dtype == "FIXED":
+                column.numeric_precision = precision
+                column.numeric_scale = scale
+            columns.append(column)
+        return columns
+
     def _show_object_metadata(self, relation: SnowflakeRelation) -> Optional[dict]:
         try:
             kwargs = {"relation": relation}
@@ -245,10 +411,13 @@ class SnowflakeAdapter(SQLAdapter):
 
         row = object_metadata[0]
 
+        is_interactive = self._interactive_flag_is_set(row)
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
         kind = row.get("kind")
 
-        if is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
+        if is_interactive and kind == str(SnowflakeRelationType.Table).upper():
+            table_type = str(SnowflakeRelationType.InteractiveTable).upper()
+        elif is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
             table_type = str(SnowflakeRelationType.DynamicTable).upper()
         else:
             table_type = kind
@@ -335,6 +504,9 @@ class SnowflakeAdapter(SQLAdapter):
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
+            schema_functions = self.execute_macro(
+                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
             # Alternatively, we could query the list of schemas before we start
@@ -345,22 +517,69 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        tabular_columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
-        return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
+        # Accounts without the interactive-table feature omit this column, and agate's
+        # .select() raises on a missing one -- which would break list_relations for the whole schema.
+        if "is_interactive" in schema_objects.column_names:
+            tabular_columns.append("is_interactive")
+        tabular_relations = [
+            self._parse_list_relations_result(obj)
+            for obj in schema_objects.select(tabular_columns)
+        ]
+        function_relations = [
+            self._parse_list_function_relations_result(obj)
+            for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
+        ]
+        return tabular_relations + function_relations
+
+    @staticmethod
+    def _interactive_flag_is_set(result: "agate.Row") -> bool:
+        """Absent column, NULL, and empty string all mean "not interactive"."""
+        value = result.get("is_interactive")
+        if value is None:
+            return False
+        return str(value).strip().upper() in ("Y", "YES")
+
+    @classmethod
+    def _tabular_relation_type(cls, kind: str, result: "agate.Row"):
+        try:
+            relation_type = cls.Relation.get_relation_type(kind.lower())
+        except ValueError:
+            return cls.Relation.External
+
+        if relation_type == cls.Relation.Table:
+            # Interactive tables report kind=TABLE. A *dynamic* interactive table
+            # sets BOTH is_interactive and is_dynamic, so interactive must be
+            # checked first or it is misclassified as a plain dynamic table.
+            if cls._interactive_flag_is_set(result):
+                return cls.Relation.InteractiveTable
+            if result["is_dynamic"] == "Y":
+                return cls.Relation.DynamicTable
+
+        return relation_type
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+        database = result["database_name"]
+        schema = result["schema_name"]
+        identifier = result["name"]
+        is_iceberg = result["is_iceberg"]
 
-        try:
-            relation_type = self.Relation.get_relation_type(relation_type.lower())
-        except ValueError:
-            relation_type = self.Relation.External
-
-        if relation_type == self.Relation.Table and is_dynamic == "Y":
-            relation_type = self.Relation.DynamicTable
+        relation_type = self._tabular_relation_type(result["kind"], result)
 
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
@@ -376,6 +595,17 @@ class SnowflakeAdapter(SQLAdapter):
             identifier=identifier,
             type=relation_type,
             table_format=table_format,
+            quote_policy=quote_policy,
+        )
+
+    def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
+        return self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier=identifier,
+            type=self.Relation.Function,
             quote_policy=quote_policy,
         )
 
@@ -553,6 +783,10 @@ CALL {proc_name}();
         """
         if catalog := parse_model.catalog_name(model):
             catalog_integration = self.get_catalog_integration(catalog)
+            if isinstance(catalog_integration, BuiltInCatalogIntegration):
+                catalog_integration.use_snowflake_managed_storage_default = (
+                    self.behavior.snowflake_managed_iceberg_default.no_warn
+                )
             return catalog_integration.build_relation(model)
         return None
 
@@ -570,7 +804,8 @@ CALL {proc_name}();
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
         show_sql = (
-            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
+            f"show dynamic tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
         )
         res, dt_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
@@ -608,6 +843,41 @@ CALL {proc_name}();
 
         return {"dynamic_table": selected}
 
+    @available
+    def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """Get all relevant metadata about an interactive table. `SHOW ... LIKE`
+        pattern-matches, so results are filtered to an exact name match."""
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_sql = (
+            f"show interactive tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
+        )
+        res, tables_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get interactive table metadata: {show_sql} failed")
+
+        tables_table = tables_table.rename(
+            column_names=[name.lower() for name in tables_table.column_names]
+        )
+
+        if quoting.identifier:
+            exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
+        else:
+            identifier_upper = (relation.identifier or "").upper()
+            exact_match = tables_table.where(
+                lambda row: (row.get("name") or "").upper() == identifier_upper
+            )
+        if len(exact_match.rows) == 0:
+            raise DbtRuntimeError(f"Could not find interactive table: {relation.identifier}")
+
+        available_columns = [c.lower() for c in exact_match.column_names]
+        select_columns = [c for c in INTERACTIVE_TABLE_COLUMNS if c in available_columns]
+        selected = exact_match.select(select_columns)
+
+        return {"interactive_table": selected}
+
     def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
         Query SHOW TABLES to determine if a dynamic table is transient.
@@ -618,7 +888,10 @@ CALL {proc_name}();
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
-        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        show_tables_sql = (
+            f"show tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
+        )
         _, tables_table = self.execute(show_tables_sql, fetch=True)
         if len(tables_table.rows) > 0:
             tables_table = tables_table.rename(

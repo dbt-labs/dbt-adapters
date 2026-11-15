@@ -24,6 +24,7 @@ class BigLakeCatalogIntegration(CatalogIntegration):
             file_format=self.file_format,
             external_volume=self.external_volume,
             storage_uri=self._calculate_storage_uri(model),
+            catalog_database=self.catalog_database,
         )
 
     def _calculate_storage_uri(self, model: RelationConfig) -> Optional[str]:

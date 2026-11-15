@@ -46,6 +46,16 @@ DYNAMIC_ICEBERG_TABLE = """
 select * from {{ ref('my_seed') }}
 """
 
+INTERACTIVE_TABLE = """
+{{ config(
+    materialized='interactive_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 hour',
+    cluster_by='id',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
 ICEBERG_TABLE = """
 {{ config(
     materialized='table',

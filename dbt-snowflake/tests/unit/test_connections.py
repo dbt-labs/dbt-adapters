@@ -5,6 +5,7 @@ from importlib import reload
 from unittest.mock import Mock, patch, call
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -204,6 +205,63 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsReuseConnections:
+    """auth_args() never passes reuse_connections to the connector: it is dbt's own
+    pooling switch, read by SnowflakeConnectionManager.release()"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    def test_reuse_connections_defaults_to_true(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_unset_with_keep_alive_is_not_passed(self, base_credentials):
+        # when client_session_keep_alive is set, reuse_connections stays None;
+        # passing None to the connector is a hard error on connector 5.x
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True
+        )
+        assert creds.reuse_connections is None
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_false_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=False
+        )
+        assert creds.reuse_connections is False
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_true_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=True
+        )
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    @pytest.mark.parametrize(
+        "reuse_connections,released",
+        [(True, False), (False, True), (None, True)],
+    )
+    def test_release_honors_reuse_connections(self, reuse_connections, released):
+        manager = connections.SnowflakeConnectionManager.__new__(
+            connections.SnowflakeConnectionManager
+        )
+        manager.profile = Mock(credentials=Mock(reuse_connections=reuse_connections))
+        with patch.object(connections.SQLConnectionManager, "release") as parent_release:
+            manager.release()
+        assert parent_release.called is released
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 
@@ -276,3 +334,116 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+def test_connnections_credentials_passes_through_wif_params():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "azure",
+        "workload_identity_entra_resource": "app://123",
+        "token": "test_token",
+    }
+    auth_args = connections.SnowflakeCredentials(**credentials).auth_args()
+    assert auth_args["authenticator"] == "WORKLOAD_IDENTITY"
+    assert auth_args["workload_identity_provider"] == "azure"
+    assert auth_args["workload_identity_entra_resource"] == "app://123"
+    assert auth_args["token"] == "test_token"
+
+
+def test_connnections_credentials_wif_oidc_token_and_no_user_no_warning():
+    """OIDC workload identity uses a token and no user; neither should trigger
+    the 'token set but authenticator wrong' warning nor the 'user required' error.
+
+    If 'workload_identity' is ever removed from the allowlist in __post_init__,
+    warn_or_error would be called and this assertion would fail.
+    """
+    credentials = {
+        "account": "test_account",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "OIDC",
+        "token": "oidc_jwt_token",
+        # intentionally no 'user' — not required for workload identity
+    }
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        connections.SnowflakeCredentials(**credentials)
+        mock_warn.assert_not_called()
+
+
+def test_connnections_credentials_workload_identity_authenticator_is_case_insensitive():
+    """workload_identity is matched case-insensitively in both __post_init__ validation
+    and auth_args (e.g. 'WORKLOAD_IDENTITY'). Other authenticators stay case-sensitive."""
+    credentials = {
+        "account": "test_account",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "OIDC",
+        "token": "oidc_jwt_token",
+        # no 'user' — must not trip validation despite the uppercase authenticator
+    }
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        creds = connections.SnowflakeCredentials(**credentials)
+        mock_warn.assert_not_called()
+    auth_args = creds.auth_args()
+    assert auth_args["authenticator"] == "WORKLOAD_IDENTITY"
+    assert auth_args["token"] == "oidc_jwt_token"
+
+
+def test_connnections_credentials_wif_authenticator_fails_without_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        # Missing workload_identity_provider
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_invalid_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "some_non_existent_cloud_provider",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_and_non_azure_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "aws",
+        "workload_identity_entra_resource": "app://123",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+        in str(excinfo)
+    )

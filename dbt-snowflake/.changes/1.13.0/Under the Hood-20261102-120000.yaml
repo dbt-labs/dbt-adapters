@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Bump the upper bound of snowflake-connector-python from <5.0.0 to <6.0.0
+time: 2026-11-02T12:00:00.000000+05:30
+custom:
+    Author: sfc-gh-turbaszek
+    Issue: NA

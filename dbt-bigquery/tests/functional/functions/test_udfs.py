@@ -6,6 +6,7 @@ from dbt.tests.util import run_dbt
 from dbt.tests.adapter.functions.files import MY_UDF_PYTHON, MY_UDF_PYTHON_WITH_NUMPY
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
+    CanFindScalarFunctionRelation,
     DeterministicUDF,
     StableUDF,
     NonDeterministicUDF,
@@ -209,6 +210,15 @@ class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
         return {
             "price_for_xlarge.sql": files.MY_UDF_SQL,
             "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class TestBigqueryCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
         }
 
 

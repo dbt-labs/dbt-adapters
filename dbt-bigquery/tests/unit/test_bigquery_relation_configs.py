@@ -179,6 +179,39 @@ class TestBigQueryRelationConfigs(unittest.TestCase):
             self.assertIsNotNone(changeset)
             self.assertIsNotNone(changeset.options)
 
+    def test_describe_relation_result_serializes_immutable_maps_and_datetime(self):
+        """Recorded describe_relation result serializes MappingProxyType labels/tags
+        and a datetime expiration to a non-null dict."""
+        from datetime import datetime, timezone
+        from types import MappingProxyType
+
+        from dbt.adapters.bigquery.record.record_types import (
+            BigQueryAdapterDescribeRelationResult,
+        )
+
+        options = BigQueryOptionsConfig(
+            enable_refresh=True,
+            refresh_interval_minutes=30,
+            expiration_timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            labels=MappingProxyType({"env": "test", "team": "data"}),
+            tags=MappingProxyType({"test-project/team": "data"}),
+        )
+        mv_config = BigQueryMaterializedViewConfig(
+            table_id="test_table",
+            dataset_id="test_dataset",
+            project_id="test_project",
+            options=options,
+        )
+
+        return_val = BigQueryAdapterDescribeRelationResult(mv_config)._to_dict()["return_val"]
+
+        self.assertIsInstance(return_val, dict)
+        self.assertEqual(return_val["options"]["labels"], {"env": "test", "team": "data"})
+        self.assertEqual(return_val["options"]["tags"], {"test-project/team": "data"})
+        self.assertEqual(
+            return_val["options"]["expiration_timestamp"], "2024-01-01T12:00:00+00:00"
+        )
+
 
 class TestClusterConfigComparison(unittest.TestCase):
     def test_same_fields_different_order_no_change(self):

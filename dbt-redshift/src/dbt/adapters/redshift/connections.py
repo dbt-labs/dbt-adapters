@@ -194,6 +194,10 @@ class RedshiftCredentials(Credentials):
     # downstream views (no CASCADE side-effects).
     allow_concurrent_drops: bool = False
 
+    # Drop behavior: omit CASCADE from DROP TABLE/VIEW/MATERIALIZED VIEW
+    # statements. Safe only for projects with no downstream dependents.
+    drop_without_cascade: bool = False
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -233,6 +237,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_count",
             "query_group",
             "allow_concurrent_drops",
+            "drop_without_cascade",
         )
 
     @property

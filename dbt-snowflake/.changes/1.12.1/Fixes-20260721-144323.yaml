@@ -1,0 +1,8 @@
+kind: Fixes
+body: Ignore `change_tracking=false` for Iceberg tables instead of emitting invalid
+  DDL, since Snowflake does not allow change tracking to be turned off for Iceberg
+  tables
+time: 2026-07-21T14:43:23.000000-05:00
+custom:
+  Author: tauhid621
+  Issue: "0"

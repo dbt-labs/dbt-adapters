@@ -1,0 +1,9 @@
+kind: Fixes
+body: 'Compare a dynamic table''s refresh warehouse case-insensitively when detecting
+    configuration changes: Snowflake folds unquoted warehouse names to upper case
+    on readback, so a desired `my_wh` compared against a reported `MY_WH` was treated
+    as a change and fired a spurious ALTER on every run'
+time: 2026-09-02T14:58:30.250793+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""
