@@ -70,6 +70,7 @@ TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
     2935: "hllsketch",  # hllsketch
     3000: "geometry",  # geometry
     3001: "geography",  # geography
+    3999: "geometry",  # GEOMETRYHEX is the wire representation of geometry
     4000: "super",  # super
     6551: "binary varying",  # varbyte
 }

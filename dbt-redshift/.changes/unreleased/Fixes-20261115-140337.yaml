@@ -1,0 +1,6 @@
+kind: Fixes
+body: Recognize geometry columns when the Redshift driver reports the GEOMETRYHEX wire type
+time: 2026-11-15T14:03:37.5805181+05:45
+custom:
+    Author: ItsM0rty
+    Issue: "2108"
