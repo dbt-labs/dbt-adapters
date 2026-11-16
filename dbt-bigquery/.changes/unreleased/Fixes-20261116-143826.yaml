@@ -1,0 +1,6 @@
+kind: Fixes
+body: Correct escaping of backslashes and backticks in BigQuery identifiers and quote columns in add and drop statements.
+time: 2026-11-16T14:38:26.227922+05:30
+custom:
+    Author: aahel sriramr98
+    Issue: "2330"
