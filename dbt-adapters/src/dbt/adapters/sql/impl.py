@@ -213,7 +213,9 @@ class SQLAdapter(BaseAdapter):
 
     @classmethod
     def quote(self, identifier):
-        return '"{}"'.format(identifier)
+        # Identifiers can come from the warehouse, so an embedded quote is doubled to keep
+        # the name a single identifier.
+        return '"{}"'.format(str(identifier).replace('"', '""'))
 
     def list_schemas(self, database: str) -> List[str]:
         results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})

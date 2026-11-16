@@ -5,6 +5,8 @@ from google.cloud.bigquery import SchemaField
 
 from dbt.adapters.base.column import Column
 
+from dbt.adapters.bigquery.utility import quote_identifier
+
 
 _PARENT_DATA_TYPE_KEY = "__parent_data_type"
 
@@ -173,7 +175,7 @@ class BigQueryColumn(Column):
 
     @property
     def quoted(self):
-        return "`{}`".format(self.column)
+        return quote_identifier(self.column)
 
     def literal(self, value):
         return "cast({} as {})".format(value, self.dtype)

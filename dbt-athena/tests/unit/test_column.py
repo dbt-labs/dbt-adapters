@@ -22,6 +22,21 @@ class TestAthenaColumn:
         assert column.is_iceberg() is expected
 
     @pytest.mark.parametrize(
+        "name,expected_quoted,expected_quoted_hive",
+        [
+            pytest.param("foo", '"foo"', "`foo`"),
+            pytest.param('a"b', '"a""b"', '`a"b`'),
+            pytest.param("a`b", '"a`b"', "`a``b`"),
+        ],
+    )
+    def test_quoted_escapes_embedded_quote_character(
+        self, name, expected_quoted, expected_quoted_hive
+    ):
+        column = self.setup_column(column=name)
+        assert column.quoted == expected_quoted
+        assert column.quoted_hive == expected_quoted_hive
+
+    @pytest.mark.parametrize(
         "dtype,expected_type_func",
         [
             pytest.param("varchar", "is_string"),
