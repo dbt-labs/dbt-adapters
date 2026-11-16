@@ -96,7 +96,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryMaterializedViewConfig,
     PartitionConfig,
 )
-from dbt.adapters.bigquery.utility import sql_escape
+from dbt.adapters.bigquery.utility import quote_identifier, sql_escape
 
 from dbt.adapters.bigquery.struct_utils import (
     build_nested_additions,
@@ -493,7 +493,7 @@ class BigQueryAdapter(BaseAdapter):
 
     @classmethod
     def quote(cls, identifier: str) -> str:
-        return "`{}`".format(identifier)
+        return quote_identifier(identifier)
 
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx: int) -> str:

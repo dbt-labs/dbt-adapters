@@ -1,0 +1,6 @@
+kind: Fixes
+body: Correct quoting of identifiers containing embedded quote characters during schema changes and snapshots.
+time: 2026-11-16T14:38:26.18931+05:30
+custom:
+    Author: aahel sriramr98
+    Issue: "2328"

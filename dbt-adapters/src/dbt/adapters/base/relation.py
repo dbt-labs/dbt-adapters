@@ -317,9 +317,11 @@ class BaseRelation(FakeAPIObject, Hashable):
         return filter
 
     def quoted(self, identifier):
+        # An embedded quote character is doubled to keep the name a single identifier.
+        # With no quote character (e.g. a "pure" render) this is a no-op.
         return "{quote_char}{identifier}{quote_char}".format(
             quote_char=self.quote_character,
-            identifier=identifier,
+            identifier=str(identifier).replace(self.quote_character, self.quote_character * 2),
         )
 
     @staticmethod
