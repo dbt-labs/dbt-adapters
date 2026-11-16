@@ -69,18 +69,18 @@
 
   {#- do alter_relation_add_columns(relation, [ tmp_column ], table_type) -#}
   {%- set add_column_query -%}
-    alter {{ relation.type }} {{ relation.render_pure() }} add columns({{ tmp_column }} {{ new_ddl_data_type }});
+    alter {{ relation.type }} {{ relation.render_pure() }} add columns(`{{ tmp_column | replace('`', '``') }}` {{ new_ddl_data_type }});
   {%- endset -%}
   {%- do run_query(add_column_query) -%}
 
   {%- set update_query -%}
-    update {{ relation.render_pure() }} set {{ tmp_column }} = cast({{ column_name }} as {{ new_column_type }});
+    update {{ relation.render_pure() }} set {{ adapter.quote(tmp_column) }} = cast({{ adapter.quote(column_name) }} as {{ new_column_type }});
   {%- endset -%}
   {%- do run_query(update_query) -%}
 
   {#- do alter_relation_drop_columns(relation, [ column_name ]) -#}
   {%- set drop_column_query -%}
-    alter {{ relation.type }} {{ relation.render_pure() }} drop column {{ column_name }};
+    alter {{ relation.type }} {{ relation.render_pure() }} drop column `{{ column_name | replace('`', '``') }}`;
   {%- endset -%}
   {%- do run_query(drop_column_query) -%}
 

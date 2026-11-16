@@ -614,7 +614,10 @@ class AthenaAdapter(SQLAdapter):
         return f"{suffix_initial}_{str(uuid4()).replace('-', '_')}"
 
     def quote(self, identifier: str) -> str:  # type:ignore
-        return f"{self.quote_character}{identifier}{self.quote_character}"
+        # An embedded quote character is doubled to keep the name a single identifier.
+        quote_character = self.quote_character
+        escaped = str(identifier).replace(quote_character, quote_character * 2)
+        return f"{quote_character}{escaped}{quote_character}"
 
     @available
     def quote_seed_column(

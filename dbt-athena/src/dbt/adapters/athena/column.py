@@ -19,15 +19,17 @@ class AthenaColumn(Column):
 
     @property
     def quoted(self) -> str:
-        """Override quoted property to ensure double quotes are used for Athena column identifiers"""
-        return f'"{self.column}"'
+        """Override quoted property to ensure double quotes are used for Athena column identifiers.
+        An embedded double quote is doubled to keep the name a single identifier."""
+        return '"{}"'.format(str(self.column).replace('"', '""'))
 
     @property
     def quoted_hive(self) -> str:
         """
         For some reason, sometimes we need to use double quotes, sometimes we need to use backticks.
+        An embedded backtick is doubled to keep the name a single identifier.
         """
-        return f"`{self.column}`"
+        return "`{}`".format(str(self.column).replace("`", "``"))
 
     def is_iceberg(self) -> bool:
         return self.table_type == TableType.ICEBERG

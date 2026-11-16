@@ -43,3 +43,14 @@ def sql_escape(string):
     if not isinstance(string, str):
         raise dbt_common.exceptions.CompilationError(f"cannot escape a non-string: {string}")
     return json.dumps(string)[1:-1]
+
+
+def quote_identifier(identifier: Any) -> str:
+    """Quote a GoogleSQL identifier with backticks.
+
+    Quoted identifiers take the same escape sequences as string literals, so a backslash or
+    backtick in the name is backslash-escaped to keep it a single identifier.
+    https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical
+    """
+    escaped = str(identifier).replace("\\", "\\\\").replace("`", "\\`")
+    return f"`{escaped}`"
