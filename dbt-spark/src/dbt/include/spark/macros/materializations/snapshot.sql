@@ -78,7 +78,7 @@
     {% call statement() %}
       alter table {{ relation }} add columns (
         {% for column in columns %}
-          `{{ column.name }}` {{ column.data_type }} {{- ',' if not loop.last -}}
+          {{ adapter.quote(column.name) }} {{ column.data_type }} {{- ',' if not loop.last -}}
         {% endfor %}
       );
     {% endcall %}

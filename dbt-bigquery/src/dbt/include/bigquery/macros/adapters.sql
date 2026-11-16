@@ -150,7 +150,7 @@
 
      alter {{ relation.type }} {{ relation }}
         {% for column in add_columns %}
-          add column {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+          add column {{ adapter.quote(column.name) }} {{ column.data_type }}{{ ',' if not loop.last }}
         {% endfor %}
 
   {%- endset -%}
@@ -166,7 +166,7 @@
      alter {{ relation.type }} {{ relation }}
 
         {% for column in drop_columns %}
-          drop column {{ column.name }}{{ ',' if not loop.last }}
+          drop column {{ adapter.quote(column.name) }}{{ ',' if not loop.last }}
         {% endfor %}
 
   {%- endset -%}
