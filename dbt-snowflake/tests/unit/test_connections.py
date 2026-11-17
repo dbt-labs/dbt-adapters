@@ -263,7 +263,7 @@ class TestSnowflakeCredentialsReuseConnections:
 
 
 class TestSnowflakeCredentialsCertRevocationCheckMode:
-    """`cert_revocation_check_mode` maps to the OCSP options on connector 4.x, and to
+    """`revocation_check_mode` maps to the OCSP options on connector 4.x, and to
     `crl_check_mode` on connector 5.x, which has no OCSP"""
 
     @pytest.fixture
@@ -283,20 +283,20 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
             (4, {}, {"disable_ocsp_checks": False, "ocsp_fail_open": True}),
             (
                 4,
-                {"cert_revocation_check_mode": "ENABLED"},
+                {"revocation_check_mode": "ENABLED"},
                 {"disable_ocsp_checks": False, "ocsp_fail_open": False},
             ),
             (
                 4,
-                {"cert_revocation_check_mode": "DISABLED"},
+                {"revocation_check_mode": "DISABLED"},
                 {"disable_ocsp_checks": True, "ocsp_fail_open": True},
             ),
             (4, {"insecure_mode": True}, {"disable_ocsp_checks": True, "ocsp_fail_open": True}),
             # CRL checks are opt-in on 5.x: nothing is passed when the mode is unset
             (5, {}, {}),
-            (5, {"cert_revocation_check_mode": "ADVISORY"}, {"crl_check_mode": "ADVISORY"}),
-            (5, {"cert_revocation_check_mode": "ENABLED"}, {"crl_check_mode": "ENABLED"}),
-            (5, {"cert_revocation_check_mode": "DISABLED"}, {"crl_check_mode": "DISABLED"}),
+            (5, {"revocation_check_mode": "ADVISORY"}, {"crl_check_mode": "ADVISORY"}),
+            (5, {"revocation_check_mode": "ENABLED"}, {"crl_check_mode": "ENABLED"}),
+            (5, {"revocation_check_mode": "DISABLED"}, {"crl_check_mode": "DISABLED"}),
             (5, {"insecure_mode": True}, {"crl_check_mode": "DISABLED"}),
         ],
         ids=[
@@ -332,33 +332,29 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
         ],
     )
     def test_mode_is_normalized(self, base_credentials, value, expected):
-        creds = connections.SnowflakeCredentials(
-            **base_credentials, cert_revocation_check_mode=value
-        )
-        assert creds.cert_revocation_check_mode == expected
+        creds = connections.SnowflakeCredentials(**base_credentials, revocation_check_mode=value)
+        assert creds.revocation_check_mode == expected
 
     def test_default_mode_is_unset(self, base_credentials):
         creds = connections.SnowflakeCredentials(**base_credentials)
-        assert creds.cert_revocation_check_mode is None
+        assert creds.revocation_check_mode is None
 
     def test_invalid_mode_raises(self, base_credentials):
-        with pytest.raises(DbtConfigError, match="Invalid cert_revocation_check_mode 'strict'"):
-            connections.SnowflakeCredentials(
-                **base_credentials, cert_revocation_check_mode="strict"
-            )
+        with pytest.raises(DbtConfigError, match="Invalid revocation_check_mode 'strict'"):
+            connections.SnowflakeCredentials(**base_credentials, revocation_check_mode="strict")
 
     def test_insecure_mode_with_enabled_raises(self, base_credentials):
         with pytest.raises(DbtConfigError, match="cannot be combined"):
             connections.SnowflakeCredentials(
-                **base_credentials, insecure_mode=True, cert_revocation_check_mode="ENABLED"
+                **base_credentials, insecure_mode=True, revocation_check_mode="ENABLED"
             )
 
     def test_replace_keeps_settings(self, base_credentials):
         # `replace()` runs `__post_init__` again on values it already normalized
         creds = connections.SnowflakeCredentials(
-            **base_credentials, cert_revocation_check_mode="enabled"
+            **base_credentials, revocation_check_mode="enabled"
         )
-        assert creds.replace(user="other_user").cert_revocation_check_mode == "ENABLED"
+        assert creds.replace(user="other_user").revocation_check_mode == "ENABLED"
 
         insecure = connections.SnowflakeCredentials(**base_credentials).replace(insecure_mode=True)
         with patch.object(connections, "_connector_major_version", return_value=5):
