@@ -91,8 +91,8 @@ ERROR_REDACTION_PATTERNS = {
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
 }
 
-# values of `cert_revocation_check_mode`: fail-open, fail-closed, no checks
-CERT_REVOCATION_CHECK_MODES = ("ADVISORY", "ENABLED", "DISABLED")
+# values of `revocation_check_mode`: fail-open, fail-closed, no checks
+REVOCATION_CHECK_MODES = ("ADVISORY", "ENABLED", "DISABLED")
 
 
 def _connector_major_version() -> int:
@@ -165,7 +165,7 @@ class SnowflakeCredentials(Credentials):
     insecure_mode: Optional[bool] = False
     # ADVISORY (fail-open), ENABLED (fail-closed) or DISABLED. Unset keeps each connector's
     # default: OCSP fail-open on 4.x, no CRL checks on 5.x; see `revocation_check_args()`
-    cert_revocation_check_mode: Optional[str] = None
+    revocation_check_mode: Optional[str] = None
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
@@ -221,19 +221,19 @@ class SnowflakeCredentials(Credentials):
         if self.client_session_keep_alive is False and self.reuse_connections is None:
             self.reuse_connections = True
 
-        if self.cert_revocation_check_mode is not None:
-            mode = str(self.cert_revocation_check_mode).upper()
-            if mode not in CERT_REVOCATION_CHECK_MODES:
+        if self.revocation_check_mode is not None:
+            mode = str(self.revocation_check_mode).upper()
+            if mode not in REVOCATION_CHECK_MODES:
                 raise DbtConfigError(
-                    f"Invalid cert_revocation_check_mode '{self.cert_revocation_check_mode}'. "
-                    f"Expected one of: {', '.join(CERT_REVOCATION_CHECK_MODES)}"
+                    f"Invalid revocation_check_mode '{self.revocation_check_mode}'. "
+                    f"Expected one of: {', '.join(REVOCATION_CHECK_MODES)}"
                 )
             if self.insecure_mode and mode == "ENABLED":
                 raise DbtConfigError(
                     "insecure_mode turns certificate revocation checks off, so it cannot be "
-                    "combined with cert_revocation_check_mode: ENABLED"
+                    "combined with revocation_check_mode: ENABLED"
                 )
-            self.cert_revocation_check_mode = mode
+            self.revocation_check_mode = mode
 
     @property
     def type(self):
@@ -267,7 +267,7 @@ class SnowflakeCredentials(Credentials):
             "retry_on_database_errors",
             "retry_all",
             "insecure_mode",
-            "cert_revocation_check_mode",
+            "revocation_check_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
@@ -299,7 +299,7 @@ class SnowflakeCredentials(Credentials):
         Connector 4.x checks with OCSP: fail-open for ADVISORY or unset, fail-closed for
         ENABLED, and no checks for DISABLED or `insecure_mode`.
         """
-        mode = "DISABLED" if self.insecure_mode else self.cert_revocation_check_mode
+        mode = "DISABLED" if self.insecure_mode else self.revocation_check_mode
         if _connector_major_version() >= 5:
             return {"crl_check_mode": mode} if mode else {}
         return {

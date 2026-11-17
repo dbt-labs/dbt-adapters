@@ -353,10 +353,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.assertIsNone(conn.credentials.reuse_connections)
         self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
 
-    def test_cert_revocation_check_mode_enabled_uses_fail_closed_ocsp_on_connector_4(self):
-        self.config.credentials = self.config.credentials.replace(
-            cert_revocation_check_mode="ENABLED"
-        )
+    def test_revocation_check_mode_enabled_uses_fail_closed_ocsp_on_connector_4(self):
+        self.config.credentials = self.config.credentials.replace(revocation_check_mode="ENABLED")
         self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
         conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
 
@@ -404,9 +402,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
     def test_revocation_checks_use_crl_on_connector_5(self):
         self.connector_major_version.return_value = 5
-        self.config.credentials = self.config.credentials.replace(
-            cert_revocation_check_mode="ADVISORY"
-        )
+        self.config.credentials = self.config.credentials.replace(revocation_check_mode="ADVISORY")
         self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
         conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
 
