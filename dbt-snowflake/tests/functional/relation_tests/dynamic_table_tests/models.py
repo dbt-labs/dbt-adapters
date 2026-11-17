@@ -426,13 +426,14 @@ select * from {{ ref('my_seed') }}
 """
 
 
+# Keep the default AUTO refresh mode used by the disabled fixture so this
+# transition only tests scheduler changes and cannot trigger table replacement.
 DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED = """
 {{ config(
     materialized='dynamic_table',
     snowflake_warehouse='DBT_TESTING',
     target_lag='2 minutes',
     scheduler='ENABLE',
-    refresh_mode='INCREMENTAL',
 ) }}
 select * from {{ ref('my_seed') }}
 """
