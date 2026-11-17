@@ -1,6 +1,0 @@
-kind: Fixes
-body: Correct quoting of Athena identifiers containing embedded quote characters during schema changes.
-time: 2026-11-16T14:38:26.20993+05:30
-custom:
-    Author: aahel sriramr98
-    Issue: "2330"
