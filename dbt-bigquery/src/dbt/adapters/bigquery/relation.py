@@ -21,6 +21,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryPartitionConfigChange,
 )
 from dbt.adapters.bigquery.relation_configs._cluster import BigQueryClusterConfig
+from dbt.adapters.bigquery.utility import quote_identifier
 
 
 Self = TypeVar("Self", bound="BigQueryRelation")
@@ -72,6 +73,10 @@ class BigQueryRelation(BaseRelation):
                 return False
 
         return True
+
+    def quoted(self, identifier):
+        # GoogleSQL escapes a backtick with a backslash, not by doubling it.
+        return quote_identifier(identifier)
 
     @property
     def project(self):
@@ -182,6 +187,10 @@ class BigQueryInformationSchema(InformationSchema):
             schema=schema,
             identifier=identifier,
         )
+
+    def quoted(self, identifier):
+        # GoogleSQL escapes a backtick with a backslash, not by doubling it.
+        return quote_identifier(identifier)
 
     def get_region_identifier(self) -> str:
         region_id = f"region-{self.location}"

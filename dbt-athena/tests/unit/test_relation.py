@@ -70,3 +70,13 @@ class TestAthenaRelation:
             schema=DATABASE_NAME,
         )
         assert relation.render_pure() == f"{DATA_CATALOG_NAME}.{DATABASE_NAME}.{TABLE_NAME}"
+
+    def test_render_escapes_embedded_quote_characters(self):
+        relation = AthenaRelation.create(
+            identifier='a"b`c',
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+        )
+        assert relation.render() == f'"{DATA_CATALOG_NAME}"."{DATABASE_NAME}"."a""b`c"'
+        assert relation.render_hive() == f'`{DATABASE_NAME}`.`a"b``c`'
+        assert relation.render_pure() == f'{DATA_CATALOG_NAME}.{DATABASE_NAME}.a"b`c'
