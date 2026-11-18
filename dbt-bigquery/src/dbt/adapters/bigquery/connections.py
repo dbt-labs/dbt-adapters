@@ -83,6 +83,10 @@ class BigQueryConnectionManager(BaseConnectionManager):
         `reuse_connections` is set, keep the client open for the thread's next node.
         `cleanup_all` closes it when the invocation ends."""
         if self._reuse_connections:
+            # a connection that failed to open has no client to reuse or close
+            conn = self.get_if_exists()
+            if conn is not None and conn.state == ConnectionState.FAIL:
+                self.clear_thread_connection()
             return
         super().release()
 

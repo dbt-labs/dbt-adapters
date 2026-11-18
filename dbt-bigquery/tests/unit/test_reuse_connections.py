@@ -4,6 +4,8 @@ from unittest.mock import Mock, patch
 import google.cloud.bigquery
 import pytest
 
+from dbt.adapters.exceptions.connection import FailedToConnectError
+
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
 from dbt.adapters.contracts.connection import ConnectionState
@@ -88,6 +90,22 @@ class TestReuseConnectionsRelease:
 
         client.close.assert_called_once()
         assert manager.thread_connections == {}
+
+
+class TestReuseConnectionsFailedOpen:
+    def test_failed_connection_is_discarded_on_release(self, client_factory):
+        manager = _manager(reuse_connections=True)
+        client_factory.side_effect = Exception("cannot create client")
+
+        connection = manager.set_connection_name("model.a")
+        with pytest.raises(FailedToConnectError):
+            connection.handle
+        assert connection.state == ConnectionState.FAIL
+
+        manager.release()
+
+        assert manager.get_if_exists() is None
+        manager.cleanup_all()
 
 
 class TestReuseConnectionsLogging:
