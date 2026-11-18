@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Require dbt-adapters 1.24.6 or newer for consistent identifier quoting.
-time: 2026-11-17T13:33:39.489967+05:30
-custom:
-    Author: sriramr98
-    PR: "2337"
