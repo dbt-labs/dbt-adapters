@@ -71,6 +71,20 @@ class BigQueryConnectionManager(BaseConnectionManager):
         super().__init__(profile, mp_context)
         self.jobs_by_thread: Dict[Hashable, List[str]] = defaultdict(list)
         self._retry = RetryFactory(profile.credentials)
+        if self._reuse_connections:
+            logger.info("BigQuery client reuse is enabled")
+
+    @property
+    def _reuse_connections(self) -> bool:
+        return self.profile.credentials.reuse_connections is True
+
+    def release(self) -> None:
+        """Called each time a node finishes with this thread's connection. When
+        `reuse_connections` is set, keep the client open for the thread's next node.
+        `cleanup_all` closes it when the invocation ends."""
+        if self._reuse_connections:
+            return
+        super().release()
 
     @classmethod
     def handle_error(cls, error, message):
