@@ -53,6 +53,13 @@ def _catalog_relation(catalog_type="INFO_SCHEMA"):
     )
 
 
+class _DbtReturn(Exception):
+    """Stand-in for dbt's `return()` which short-circuits a macro."""
+
+    def __init__(self, value):
+        self.value = value
+
+
 class _MacroRenderer:
     """Renders dynamic table macros with a mocked dbt jinja context."""
 
@@ -100,7 +107,9 @@ class TestCreateOrAlterFailureHint(unittest.TestCase):
         self.assertIn("--full-refresh", hint)
 
     def test_errors_unrelated_to_create_or_alter_get_no_hint(self):
-        self.assertIsNone(_create_or_alter_hint("003001 (42501): Insufficient privileges", COA_SQL))
+        self.assertIsNone(
+            _create_or_alter_hint("003001 (42501): Insufficient privileges", COA_SQL)
+        )
 
     def test_other_statements_get_no_hint(self):
         for sql in (
@@ -347,6 +356,46 @@ class TestReplaceIcebergBaseLocation(unittest.TestCase):
     def test_set_base_location_is_rendered_as_a_quoted_string(self):
         sql = self._replace_sql(base_location="my/path/")
         self.assertIn("base_location = 'my/path/'", sql)
+
+
+class TestCreateOrAlterEnabledGate(unittest.TestCase):
+    """snowflake__dynamic_table_create_or_alter_enabled: flag + native/managed Iceberg catalog."""
+
+    def _enabled(self, flag_on=True, catalog_type="INFO_SCHEMA", catalog_relation_none=False):
+        adapter = mock.Mock()
+        adapter.behavior.snowflake_dynamic_table_create_or_alter.no_warn = flag_on
+        adapter.build_catalog_relation.return_value = (
+            None if catalog_relation_none else mock.Mock(catalog_type=catalog_type)
+        )
+
+        def dbt_return(value):
+            raise _DbtReturn(value)
+
+        renderer = _MacroRenderer({"adapter": adapter, "return": dbt_return})
+        module = renderer.module(CREATE_OR_ALTER_TEMPLATE)
+        try:
+            module.snowflake__dynamic_table_create_or_alter_enabled(mock.Mock())
+        except _DbtReturn as exc:
+            return exc.value
+        self.fail("macro did not return")
+
+    def test_enabled_for_native(self):
+        self.assertTrue(self._enabled())
+
+    def test_enabled_for_managed_iceberg(self):
+        self.assertTrue(self._enabled(catalog_type="BUILT_IN"))
+
+    def test_disabled_for_external_catalog(self):
+        self.assertFalse(self._enabled(catalog_type="ICEBERG_REST"))
+
+    def test_disabled_when_flag_off(self):
+        self.assertFalse(self._enabled(flag_on=False))
+
+    def test_disabled_when_catalog_relation_none(self):
+        self.assertFalse(self._enabled(catalog_relation_none=True))
+
+    def test_disabled_when_catalog_type_missing(self):
+        self.assertFalse(self._enabled(catalog_type=None))
 
 
 if __name__ == "__main__":

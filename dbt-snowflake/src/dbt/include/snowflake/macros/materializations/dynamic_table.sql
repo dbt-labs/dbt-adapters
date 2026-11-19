@@ -46,7 +46,7 @@
             definition in place via CREATE OR ALTER, so SQL edits deploy without --full-refresh. When it does
             not apply, fall through to the standard config-change handling below (unchanged from
             upstream). -#}
-        {% if adapter.dynamic_table_create_or_alter_enabled(config.model) %}
+        {% if snowflake__dynamic_table_create_or_alter_enabled(config.model) %}
             {% set build_sql = snowflake__get_create_or_alter_dynamic_table_sql(existing_relation, target_relation, sql) %}
 
         {% else %}

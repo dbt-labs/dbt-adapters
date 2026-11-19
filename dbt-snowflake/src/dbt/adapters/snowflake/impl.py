@@ -819,29 +819,6 @@ CALL {proc_name}();
         return None
 
     @available
-    def dynamic_table_create_or_alter_enabled(self, model: RelationConfig) -> bool:
-        """Whether the opt-in query-evolution (CREATE OR ALTER) path applies to this model.
-
-        True when the behavior flag is on and the model is a native (info schema) dynamic table or
-        a managed Iceberg one (built_in catalog, Snowflake is the Iceberg catalog). Dynamic tables
-        in externally owned catalogs (e.g. ICEBERG_REST) keep create-or-replace behavior.
-        Note: for INCREMENTAL/AUTO dynamic tables a definition edit reinitializes the table (full
-        recompute, incremental state discarded), which diverges from dbt incremental models (where
-        a logic change requires --full-refresh).
-        See https://docs.snowflake.com/en/user-guide/dynamic-tables/modify.
-
-        Args:
-            model (RelationConfig): `config.model` from the jinja context
-        """
-        if not self.behavior.snowflake_dynamic_table_create_or_alter.no_warn:
-            return False
-        catalog_relation = self.build_catalog_relation(model)
-        return getattr(catalog_relation, "catalog_type", None) in (
-            constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type,
-            constants.DEFAULT_BUILT_IN_CATALOG.catalog_type,
-        )
-
-    @available
     def describe_dynamic_table(
         self, relation: SnowflakeRelation, include_transient: bool = False
     ) -> Dict[str, Any]:

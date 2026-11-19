@@ -2,9 +2,21 @@
     The gate for this path: the `snowflake_dynamic_table_create_or_alter` behavior flag is on and
     the model's catalog is native (INFO_SCHEMA) or a managed Iceberg one (BUILT_IN, Snowflake is
     the Iceberg catalog). Dynamic tables in externally owned catalogs keep create-or-replace
-    behavior. The materialization checks it through `adapter.dynamic_table_create_or_alter_enabled`
-    (impl.py); the macros below only render the DDL once it has passed.
+    behavior. The materialization checks it through
+    `snowflake__dynamic_table_create_or_alter_enabled` (same name and logic as Fusion/v2);
+    the macros below only render the DDL once it has passed. The flag is read through
+    `.no_warn`, which does not emit a behavior-change event.
 -#}
+{% macro snowflake__dynamic_table_create_or_alter_enabled(model) -%}
+    {%- if not adapter.behavior.snowflake_dynamic_table_create_or_alter.no_warn -%}
+        {{ return(false) }}
+    {%- endif -%}
+    {%- set catalog_relation = adapter.build_catalog_relation(model) -%}
+    {%- if catalog_relation is none -%}
+        {{ return(false) }}
+    {%- endif -%}
+    {{ return(catalog_relation.catalog_type in ['INFO_SCHEMA', 'BUILT_IN']) }}
+{%- endmacro %}
 
 
 {% macro snowflake__get_create_or_alter_dynamic_table_sql(existing_relation, target_relation, sql) -%}
