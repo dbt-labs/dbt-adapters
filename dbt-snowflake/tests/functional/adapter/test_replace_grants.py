@@ -5,12 +5,10 @@ from copy import deepcopy
 
 import pytest
 from dbt.tests.adapter.grants.base_grants import BaseGrants
-from dbt.tests.util import relation_from_name, run_dbt
+from dbt.tests.util import relation_from_name, run_dbt, write_file
 
-# Snowflake BCR-2433 (bundle 2026_08) makes a bare CREATE OR REPLACE copy grants from the replaced
-# object. dbt must keep its no-copy default, so it emits IGNORE GRANTS unless copy_grants is true.
-# These tests assert the resulting grants after a re-run, so they hold with the bundle enabled
-# or disabled; run them against both states.
+# A bare CREATE OR REPLACE keeps grants on some accounts (BCR-2433 preview) and drops them on
+# others, so these tests only assert grants where dbt emits an explicit clause.
 
 _MODELS = {
     "table_unset.sql": ("table", ""),
@@ -20,6 +18,7 @@ _MODELS = {
     "view_false.sql": ("view", "copy_grants = false,"),
     "view_copy.sql": ("view", "copy_grants = true,"),
     "incremental_unset.sql": ("incremental", ""),
+    "incremental_false.sql": ("incremental", "copy_grants = false,"),
     "incremental_copy.sql": ("incremental", "copy_grants = true,"),
 }
 
@@ -77,25 +76,27 @@ class TestReplaceGrants(BaseGrants):
     def _has_select(self, project, model, user) -> bool:
         return _has_select(self.get_grants_on_relation(project, model), user)
 
-    def test_replace_ignores_grants_unless_copy_grants(self, project, test_user):
+    def test_replace_grants_clause_follows_copy_grants(self, project, test_user):
         # first run creates the relations, then grant to a role that dbt does not manage
         run_dbt(["run"])
         self._grant_out_of_band(project, test_user)
-        for model in ("table_unset", "view_unset", "incremental_unset"):
+        for model in ("table_false", "view_false", "incremental_false"):
             assert self._has_select(project, model, test_user)
 
         # tables and views are replaced on every run, incremental only on full refresh
         run_dbt(["run", "--full-refresh"])
 
-        for model in (
-            "table_unset",
-            "table_false",
-            "view_unset",
-            "view_false",
-            "incremental_unset",
-        ):
+        for model in ("table_unset", "view_unset", "incremental_unset"):
+            ddl = _cleaned_ddl(f"{model}.sql")
+            assert "create or replace" in ddl, model
+            assert "copy grants" not in ddl, model
+            assert "ignore grants" not in ddl, model
+
+        for model in ("table_false", "view_false", "incremental_false"):
             assert not self._has_select(project, model, test_user), model
-            assert "ignore grants" in _cleaned_ddl(f"{model}.sql"), model
+            ddl = _cleaned_ddl(f"{model}.sql")
+            assert "ignore grants" in ddl, model
+            assert "copy grants" not in ddl, model
 
         for model in ("table_copy", "view_copy", "incremental_copy"):
             assert self._has_select(project, model, test_user), model
@@ -117,7 +118,9 @@ class TestCloneReplaceGrants(BaseGrants):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "clone_unset.sql": _MODEL_TEMPLATE.format(materialized="table", extra=""),
+            "clone_false.sql": _MODEL_TEMPLATE.format(
+                materialized="table", extra="copy_grants = false,"
+            ),
             "clone_copy.sql": _MODEL_TEMPLATE.format(
                 materialized="table", extra="copy_grants = true,"
             ),
@@ -134,7 +137,7 @@ class TestCloneReplaceGrants(BaseGrants):
         outputs["otherschema"]["schema"] = other_schema
         return {"test": {"outputs": outputs, "target": "default"}}
 
-    def test_clone_replace_ignores_grants_unless_copy_grants(
+    def test_clone_replace_ignores_grants_when_copy_grants_false(
         self, project, other_schema, get_test_users
     ):
         if not get_test_users:
@@ -151,7 +154,7 @@ class TestCloneReplaceGrants(BaseGrants):
             model: project.adapter.Relation.create(
                 database=project.database, schema=other_schema, identifier=model
             )
-            for model in ("clone_unset", "clone_copy")
+            for model in ("clone_false", "clone_copy")
         }
         for relation in clones.values():
             project.run_sql(f"grant select on table {relation} to role {user}")
@@ -170,5 +173,50 @@ class TestCloneReplaceGrants(BaseGrants):
                 grants = project.adapter.standardize_grants_dict(table)
             return _has_select(grants, user)
 
-        assert not has_select(clones["clone_unset"])
+        assert not has_select(clones["clone_false"])
         assert has_select(clones["clone_copy"])
+
+
+_REVOKE_MODEL_TEMPLATE = """
+{{{{ config(
+    materialized = '{materialized}',
+    grants = {{'select': ['{user}']}},
+) }}}}
+
+select 1 as id
+"""
+
+
+class TestReplaceRevokesStaleGrants(BaseGrants):
+    """Unset copy_grants may keep grants on replace, so removed grants must be revoked."""
+
+    _MATERIALIZATIONS = ("table", "view")
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {f"{m}_revoke.sql": "select 1 as id" for m in self._MATERIALIZATIONS}
+
+    def _write_models(self, project, user):
+        for materialized in self._MATERIALIZATIONS:
+            write_file(
+                _REVOKE_MODEL_TEMPLATE.format(materialized=materialized, user=user),
+                project.project_root,
+                "models",
+                f"{materialized}_revoke.sql",
+            )
+
+    def test_replace_revokes_grants_removed_from_config(self, project, get_test_users):
+        if len(get_test_users) < 2:
+            pytest.skip("DBT_TEST_USER_1 and DBT_TEST_USER_2 are not set")
+        first_user, second_user = get_test_users[:2]
+
+        self._write_models(project, first_user)
+        run_dbt(["run"])
+        self._write_models(project, second_user)
+        run_dbt(["run"])
+
+        for materialized in self._MATERIALIZATIONS:
+            model = f"{materialized}_revoke"
+            grants = self.get_grants_on_relation(project, model)
+            assert not _has_select(grants, first_user), model
+            assert _has_select(grants, second_user), model

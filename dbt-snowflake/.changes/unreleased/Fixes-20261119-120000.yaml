@@ -1,0 +1,6 @@
+kind: Fixes
+body: Emit IGNORE GRANTS on Snowflake CREATE OR REPLACE only when copy_grants is false, and no grants clause when it is unset. With copy_grants unset, dbt now revokes grants removed from the grants config on replace.
+time: 2026-11-19T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "2261"

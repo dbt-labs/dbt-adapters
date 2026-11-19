@@ -120,8 +120,7 @@ class TestCreateTableReplaceGuard(unittest.TestCase):
 
     def test_plain_create_omits_grants_and_copy_tags(self):
         """Snowflake rejects COPY GRANTS, IGNORE GRANTS and COPY TAGS on a CTAS without OR
-        REPLACE, and on this path there is no replaced table to copy from. Unset copy_grants
-        would otherwise render IGNORE GRANTS."""
+        REPLACE, and on this path there is no replaced table to copy from."""
         self.should_replace.return_value = False
         for grants in (True, False, None):
             if grants is None:
