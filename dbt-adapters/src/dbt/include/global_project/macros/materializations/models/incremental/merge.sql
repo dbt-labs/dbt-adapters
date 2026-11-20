@@ -55,7 +55,9 @@
     when not matched then insert
         ({{ dest_cols_csv }})
     values
-        ({{ dest_cols_csv }})
+        ({% for col in dest_columns -%}
+            DBT_INTERNAL_SOURCE.{{ adapter.quote(col.name) }}{%- if not loop.last %}, {% endif %}
+        {%- endfor %})
 
 {% endmacro %}
 
