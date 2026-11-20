@@ -1,4 +1,4 @@
-{% macro bigquery__create_table_as(temporary, relation, compiled_code, language='sql') -%}
+{% macro bigquery__create_table_as(temporary, relation, compiled_code, language='sql', replace=true) -%}
   {%- if language == 'sql' -%}
     {%- set raw_partition_by = config.get('partition_by', none) -%}
     {%- set raw_cluster_by = config.get('cluster_by', none) -%}
@@ -12,10 +12,17 @@
     {%- endif -%}
 
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+    {#-- Never replace a snapshot's target table. The default snapshot
+         materialization creates it only on the first build, when the relation cache says it does not
+         exist, so a stale cache now errors instead of silently wiping snapshot history. Later runs build a
+         temporary staging table, which keeps `replace`. `model` is not defined in all the existing calling contexts. --#}
+    {%- set is_snapshot = model is defined and model.resource_type == 'snapshot' -%}
+    {%- set is_snapshot_target = is_snapshot and not temporary -%}
+    {%- set replace = replace and not is_snapshot_target -%}
 
     {{ sql_header if sql_header is not none }}
 
-    create or replace table {{ relation }}
+    create {% if replace %}or replace {% endif %}table {{ relation }}
       {%- set contract_config = config.get('contract') -%}
       {%- if contract_config.enforced -%}
         {{ get_assert_columns_equivalent(compiled_code) }}
@@ -65,6 +72,14 @@
   {%- endif -%}
 
 {%- endmacro -%}
+
+{% macro bq_create_table_as_with_replace(temporary, relation, compiled_code, language='sql', replace=true) %}
+  {% if replace %}
+    {{ return(create_table_as(temporary, relation, compiled_code, language)) }}
+  {% else %}
+    {{ return(bigquery__create_table_as(temporary, relation, compiled_code, language, replace=false)) }}
+  {% endif %}
+{% endmacro %}
 
 {% macro bigquery__create_view_as(relation, sql) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
@@ -117,7 +132,7 @@
       {% for flat_col in col.flatten() %}
         {% set parts = flat_col.name.split(".") %}
         {% for i in range(1, parts | length + 1) %}
-          {% set prefix = parts[:i] | join(".") | lower %}
+          {% set prefix = parts[:i] | join(".") %}
           {% if prefix not in valid_names %}
             {% do valid_names.append(prefix) %}
           {% endif %}
@@ -150,7 +165,7 @@
 
      alter {{ relation.type }} {{ relation }}
         {% for column in add_columns %}
-          add column {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+          add column {{ adapter.quote(column.name) }} {{ column.data_type }}{{ ',' if not loop.last }}
         {% endfor %}
 
   {%- endset -%}
@@ -166,7 +181,7 @@
      alter {{ relation.type }} {{ relation }}
 
         {% for column in drop_columns %}
-          drop column {{ column.name }}{{ ',' if not loop.last }}
+          drop column {{ adapter.quote(column.name) }}{{ ',' if not loop.last }}
         {% endfor %}
 
   {%- endset -%}

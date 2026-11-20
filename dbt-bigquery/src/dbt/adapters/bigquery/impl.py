@@ -5,6 +5,7 @@ from multiprocessing.context import SpawnContext
 import threading
 from typing import (
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Iterable,
@@ -38,7 +39,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
-from dbt_common.record import record_function
+from dbt_common.record import auto_record_function, record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -79,6 +80,15 @@ from dbt.adapters.bigquery.python_submissions import (
 from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterDescribeRelationRecord,
     BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterCopyTableRecord,
+    BigQueryAdapterGetDatasetLocationRecord,
+    BigQueryAdapterGrantAccessToRecord,
+    BigQueryAdapterGetColumnsInSelectSqlRecord,
+    BigQueryAdapterAlterTableAddColumnsRecord,
+    BigQueryAdapterUpdateColumnsRecord,
+    BigQueryAdapterLoadDataframeRecord,
+    BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+    BigQueryAdapterSyncStructColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -86,7 +96,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryMaterializedViewConfig,
     PartitionConfig,
 )
-from dbt.adapters.bigquery.utility import sql_escape
+from dbt.adapters.bigquery.utility import quote_identifier, sql_escape
 
 from dbt.adapters.bigquery.struct_utils import (
     build_nested_additions,
@@ -136,7 +146,7 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
 
 BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     name="bigquery_use_standard_sql_for_partitions",
-    default=False,
+    default=True,
     description=(
         "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
         "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
@@ -145,6 +155,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 )
 
 _dataset_lock = threading.Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -177,6 +191,7 @@ class BigqueryConfig(AdapterConfig):
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
+    reservation: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -207,14 +222,27 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "biglake_metastore": "biglake_metastore",
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     ###
     # Implementations of abstract methods
@@ -284,17 +312,22 @@ class BigQueryAdapter(BaseAdapter):
         client.delete_table(from_table_ref)
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
-        """Override the connection's query execution timeout based on the model config"""
+        """Override the connection's query execution timeout and reservation based on the model config"""
         timeout = config.get("job_execution_timeout_seconds")
         if timeout is not None:
             conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = float(timeout)
+        reservation = config.get("reservation")
+        if reservation is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_reservation = reservation
         return timeout
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        conn = self.connections.get_thread_connection()
         if context is not None:
-            conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = None
+        conn._bq_model_reservation = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -337,6 +370,23 @@ class BigQueryAdapter(BaseAdapter):
 
         except (ValueError, google.cloud.exceptions.NotFound) as e:
             logger.debug("get_columns_in_relation error: {}".format(e))
+            return []
+
+    @available.parse_list
+    def get_columns_and_pseudocolumns_for_relation(
+        self, relation: BigQueryRelation
+    ) -> List[BigQueryColumn]:
+        """Return all columns (regular + pseudocolumns) for a relation in a single API call."""
+        try:
+            table = self.connections.get_bq_table(
+                database=relation.database, schema=relation.schema, identifier=relation.identifier
+            )
+            columns = self._get_dbt_columns_from_bq_table(table)
+            if table.table_type == "EXTERNAL":
+                columns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+            return columns
+        except (ValueError, google.cloud.exceptions.NotFound) as e:
+            logger.debug("get_columns_and_pseudocolumns_for_relation error: {}".format(e))
             return []
 
     @available.parse(lambda *a, **k: [])
@@ -391,17 +441,38 @@ class BigQueryAdapter(BaseAdapter):
         # the implementation of list_relations for other adapters
         try:
             table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+        except google.api_core.exceptions.NotFound:
+            return []
+        except google.api_core.exceptions.Forbidden as exc:
+            self._warn_list_relations_forbidden(dataset_ref, "tables", exc)
+            return []
+
+        # Listing routines needs a separate permission (bigquery.routines.list), so a
+        # denial here must not discard the tables that were listed successfully.
+        try:
             function_relations = [
                 relation
                 for routine in all_routines
                 if (relation := self._bq_routine_to_relation(routine)) is not None
             ]  # type: ignore[misc]
-            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
-            logger.debug("list_relations_without_caching error: {}".format(str(exc)))
-            return []
+            self._warn_list_relations_forbidden(dataset_ref, "routines", exc)
+            return table_relations  # type: ignore[return-value]
+
+        return table_relations + function_relations  # type: ignore[return-value]
+
+    @staticmethod
+    def _warn_list_relations_forbidden(dataset_ref, kind: str, exc: Exception) -> None:
+        # A denied listing is not the same as an empty dataset: dbt treats every relation
+        # in the dataset as missing, so say so instead of failing silently.
+        logger.warning(
+            f"Permission denied listing {kind} in dataset "
+            f"'{dataset_ref.project}.{dataset_ref.dataset_id}'; dbt will treat it as having "
+            f"no {kind}, which can cause models to be rebuilt instead of updated. "
+            f"Grant the required BigQuery permission to fix this. Error: {exc}"
+        )
 
     def get_relation(
         self, database: str, schema: str, identifier: str
@@ -460,7 +531,7 @@ class BigQueryAdapter(BaseAdapter):
 
     @classmethod
     def quote(cls, identifier: str) -> str:
-        return "`{}`".format(identifier)
+        return quote_identifier(identifier)
 
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
@@ -529,6 +600,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_schema
 
     @available.parse(lambda *a, **k: "")
+    @record_function(
+        BigQueryAdapterCopyTableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def copy_table(self, source, destination, materialization):
         if materialization == "incremental":
             write_disposition = WRITE_APPEND
@@ -560,6 +637,12 @@ class BigQueryAdapter(BaseAdapter):
         return flattened_columns
 
     @available.parse(lambda *a, **k: False)
+    @record_function(
+        BigQueryAdapterGetColumnsInSelectSqlRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_columns_in_select_sql(self, select_sql: str) -> List[BigQueryColumn]:
         try:
             conn = self.connections.get_thread_connection()
@@ -662,12 +745,16 @@ class BigQueryAdapter(BaseAdapter):
         """
         Check if the actual and configured clustering columns for a table
         are a match. BigQuery tables can be replaced if clustering columns
-        match exactly.
+        match exactly. Names are compared case-insensitively because BigQuery
+        column identifiers are not case-sensitive, and surrounding backticks are
+        stripped because BigQuery reports clustering fields unquoted.
         """
         if isinstance(conf_cluster, str):
             conf_cluster = [conf_cluster]
 
-        return table.clustering_fields == conf_cluster
+        return [c.strip("`").lower() for c in (table.clustering_fields or [])] == [
+            c.strip("`").lower() for c in (conf_cluster or [])
+        ]
 
     @available.parse(lambda *a, **k: True)
     @record_function(
@@ -746,6 +833,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_column_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterUpdateColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def update_columns(self, relation, columns):
         if len(columns) == 0:
             return
@@ -763,6 +856,7 @@ class BigQueryAdapter(BaseAdapter):
         new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
         conn.handle.update_table(new_table, ["schema"])
 
+    @auto_record_function("AdapterUpdateTableDescription", group="Available")
     @available.parse_none
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
@@ -776,11 +870,23 @@ class BigQueryAdapter(BaseAdapter):
         client.update_table(table, ["description"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_columns(self, relation, columns):
         logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
         self.alter_table_add_remove_columns(relation, columns, None)
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
         conn = self.connections.get_thread_connection()
         client = conn.handle
@@ -832,6 +938,12 @@ class BigQueryAdapter(BaseAdapter):
             client.update_table(new_table, ["schema"])
 
     @available.parse(lambda *a, **k: {})
+    @record_function(
+        BigQueryAdapterSyncStructColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def sync_struct_columns(
         self,
         on_schema_change: str,
@@ -964,6 +1076,12 @@ class BigQueryAdapter(BaseAdapter):
         return schema_changes_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterLoadDataframeRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def load_dataframe(
         self,
         database: str,
@@ -1039,6 +1157,28 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
+                    )
+                )
+        return result
+
     def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
         """Raise an error if the source identifier contains a wildcard character.
 
@@ -1102,6 +1242,10 @@ class BigQueryAdapter(BaseAdapter):
         """
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        # get_relation_last_modified cannot render with an empty relation list
+        if not sources:
+            return adapter_responses, freshness_responses
 
         for source in sources:
             self._check_for_wildcard_identifier(source)
@@ -1253,6 +1397,12 @@ class BigQueryAdapter(BaseAdapter):
         return None
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGrantAccessToRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def grant_access_to(self, entity, entity_type, role, grant_target_dict) -> None:
         """
         Given an entity, grants it access to a dataset.
@@ -1275,6 +1425,12 @@ class BigQueryAdapter(BaseAdapter):
                 client.update_dataset(dataset, ["access_entries"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGetDatasetLocationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_dataset_location(self, relation):
         conn = self.connections.get_thread_connection()
         client = conn.handle

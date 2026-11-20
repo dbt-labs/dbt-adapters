@@ -1,0 +1,6 @@
+kind: Features
+body: Add base test class for pseudocolumn support in unit tests
+time: 2026-01-18T11:16:12.598487-05:00
+custom:
+    Author: katieclaiborne-duet
+    Issue: "1517"

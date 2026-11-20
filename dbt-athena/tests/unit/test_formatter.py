@@ -4,7 +4,6 @@ from decimal import Decimal
 
 import agate
 import pytest
-from pyathena.error import ProgrammingError
 
 from dbt.adapters.athena.connections import AthenaParameterFormatter
 
@@ -22,7 +21,7 @@ class TestAthenaParameterFormatter:
         ],
     )
     def test_query_none_or_empty(self, sql):
-        with pytest.raises(ProgrammingError) as exc:
+        with pytest.raises(ValueError) as exc:
             self.formatter.format(sql)
         assert exc.value.__str__() == "Query is none or empty."
 
@@ -36,7 +35,7 @@ class TestAthenaParameterFormatter:
         assert sql == "ALTER TABLE table ADD partition (dt = '2022-01-01')"
 
     def test_query_parameters_not_list(self):
-        with pytest.raises(ProgrammingError) as exc:
+        with pytest.raises(ValueError) as exc:
             self.formatter.format(
                 """
                 SELECT *
@@ -45,10 +44,7 @@ class TestAthenaParameterFormatter:
             """,
                 {"country": "FR"},
             )
-        assert (
-            exc.value.__str__()
-            == "Unsupported parameter (Support for list only): {'country': 'FR'}"
-        )
+        assert exc.value.__str__() == "Parameters must be a list."
 
     def test_query_parameters_unknown_formatter(self):
         with pytest.raises(TypeError) as exc:
@@ -60,7 +56,10 @@ class TestAthenaParameterFormatter:
             """,
                 [agate.Table(rows=[("a", 1), ("b", 2)], column_names=["str", "int"])],
             )
-        assert exc.value.__str__() == "<class 'agate.table.Table'> is not defined formatter."
+        assert (
+            exc.value.__str__()
+            == "No parameter formatter found for type <class 'agate.table.Table'>."
+        )
 
     def test_query_parameters_list(self):
         res = self.formatter.format(
@@ -74,6 +73,7 @@ class TestAthenaParameterFormatter:
                            AND int_field > %s
                            AND float_field > %.2f
                            AND fake_decimal_field < %s
+                           AND decimal_field > %s
                            AND str_field = %s
                            AND str_list_field IN %s
                            AND int_list_field IN %s
@@ -90,6 +90,7 @@ class TestAthenaParameterFormatter:
                 1,
                 1.23,
                 Decimal(2),
+                Decimal("0.3"),
                 "test",
                 ["a", "b"],
                 [1, 2, 3, 4],
@@ -103,19 +104,28 @@ class TestAthenaParameterFormatter:
             """
             SELECT *
               FROM table
-             WHERE nullable_field = null
+             WHERE nullable_field = NULL
                AND dt = DATE '2022-01-01'
                AND dti = TIMESTAMP '2022-01-01 00:00:00.000'
                AND int_field > 1
                AND float_field > 1.23
-               AND fake_decimal_field < 2
+               AND fake_decimal_field < DECIMAL '2'
+               AND decimal_field > DECIMAL '0.3'
                AND str_field = 'test'
                AND str_list_field IN ('a', 'b')
                AND int_list_field IN (1, 2, 3, 4)
                AND float_list_field IN (1.100000, 1.200000, 1.300000)
                AND dt_list_field IN (DATE '2022-02-01', DATE '2022-03-01')
                AND dti_list_field IN (TIMESTAMP '2022-02-01 01:02:03.000', TIMESTAMP '2022-03-01 04:05:06.000')
-               AND bool_field = True
+               AND bool_field = TRUE
             """
         ).strip()
         assert res == expected
+
+    def test_strips_quotes_from_vacuum(self):
+        sql = self.formatter.format('VACUUM "my_table"')
+        assert sql == "VACUUM my_table"
+
+    def test_strips_quotes_from_optimize(self):
+        sql = self.formatter.format('OPTIMIZE "my_db"."my_table" REWRITE DATA USING BIN_PACK')
+        assert sql == "OPTIMIZE my_db.my_table REWRITE DATA USING BIN_PACK"

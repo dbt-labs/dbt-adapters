@@ -1,14 +1,14 @@
 import json
 import unittest
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, Timeout
 from unittest.mock import patch, MagicMock, Mock, ANY
 
 import dbt.adapters
 import google.cloud.bigquery
-
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
+from dbt.adapters.bigquery.retry import _TerminalJobAwarePredicate, RetryFactory
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -110,6 +110,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             [self._table_ref("project", "dataset", "table1")],
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
+            job_id=ANY,
             retry=ANY,
         )
         args, kwargs = self.mock_client.copy_table.call_args
@@ -124,12 +125,76 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             [self._table_ref("project", "dataset", "table1")],
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
+            job_id=ANY,
             retry=ANY,
         )
         args, kwargs = self.mock_client.copy_table.call_args
         self.assertEqual(
             kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
         )
+
+    def test_copy_bq_table_attaches_to_existing_job_on_conflict(self):
+        """A resubmitted copy job (e.g. a transport retry after a lost response)
+        must attach to the existing job via get_job rather than fail with a 409,
+        since copy_table has no built-in Conflict recovery."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_x"
+        self.connections.generate_job_id = Mock(return_value=job_id)
+        self.mock_client.copy_table.side_effect = exceptions.Conflict(
+            f"Already Exists: Job project:{job_id}"
+        )
+        existing_job = Mock(job_id=job_id)
+        self.mock_client.get_job.return_value = existing_job
+
+        self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 1)
+        # We must attach to the SAME job we tried to submit, not a different id.
+        self.assertEqual(self.mock_client.copy_table.call_args.kwargs["job_id"], job_id)
+        self.mock_client.get_job.assert_called_once_with(job_id)
+        # We wait on the attached job, not a resubmitted one.
+        existing_job.result.assert_called_once()
+
+    def test_copy_bq_table_attaches_when_existing_job_failed(self):
+        """A dead copy job is attached to, not resubmitted under a fresh id.
+
+        copy_bq_table has no retry loop, so a 409 can only come from its own
+        insert being re-sent -- that job is this attempt's outcome.
+        """
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "copy_job_dead"
+        job_ids_used = []
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+        self.connections.generate_job_id = Mock(side_effect=[dead_job_id, "copy_job_fresh"])
+        self.mock_client.copy_table.side_effect = submit
+        dead_job = Mock(
+            spec=google.cloud.bigquery.CopyJob,
+            job_id=dead_job_id,
+            state="DONE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+        self.mock_client.get_job.return_value = dead_job
+
+        self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(job_ids_used, [dead_job_id])
+        self.mock_client.get_job.assert_called_once_with(dead_job_id)
+        dead_job.result.assert_called_once()
+
+    def test_job_is_terminally_failed(self):
+        from dbt.adapters.bigquery.retry import job_is_terminally_failed
+
+        error = {"reason": "backendError", "message": "boom"}
+        self.assertTrue(job_is_terminally_failed(Mock(state="DONE", error_result=error)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="RUNNING", error_result=error)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="PENDING", error_result=None)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="DONE", error_result=None)))
+        self.assertFalse(job_is_terminally_failed(None))
 
     def test_job_labels_valid_json(self):
         expected = {"key": "value"}
@@ -161,7 +226,11 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.connections.copy_bq_table(source, destination, write_disposition)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_raw_execute_retries_with_fresh_job_id(self, MockQueryJobConfig):
+    def test_raw_execute_reuses_job_id_on_retry(self, MockQueryJobConfig):
+        """The reopen-retry must reuse the SAME predetermined job_id across
+        attempts. Minting a fresh id per attempt double-executes non-idempotent
+        DML and duplicates rows (inc-6741). A stable id makes resubmission
+        idempotent via BigQuery's 409 Conflict path."""
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
         job_ids_used = []
 
@@ -176,7 +245,317 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.mock_client.query.side_effect = capture_job_id
         self.connections.raw_execute("SELECT 1")
         self.assertEqual(self.mock_client.query.call_count, 2)
-        self.assertNotEqual(job_ids_used[0], job_ids_used[1])
+        self.assertEqual(job_ids_used[0], job_ids_used[1])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_to_existing_job_on_conflict(self, MockQueryJobConfig):
+        """If the job_id already exists (a prior attempt submitted it), recover
+        by attaching to the existing job via get_job instead of resubmitting,
+        so a single statement never spawns a duplicate BigQuery job."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_x"
+        self.mock_client.query.side_effect = exceptions.Conflict(
+            f"Already Exists: Job project:{job_id}"
+        )
+        existing_job = Mock(job_id=job_id, location="US", project="project")
+        existing_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = existing_job
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=job_id,
+        )
+
+        self.mock_client.get_job.assert_called_once_with(job_id)
+        self.assertIs(query_job, existing_job)
+        # The DML must not be resubmitted.
+        self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_when_existing_job_succeeded(self, MockQueryJobConfig):
+        """A 409 on a succeeded job attaches; resubmitting would duplicate DML."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_done_ok"
+        self.mock_client.query.side_effect = exceptions.Conflict(
+            f"Already Exists: Job project:{job_id}"
+        )
+        existing_job = Mock(
+            job_id=job_id, location="US", project="project", state="DONE", error_result=None
+        )
+        existing_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = existing_job
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=job_id,
+        )
+
+        self.assertIs(query_job, existing_job)
+        self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_when_existing_job_failed(self, MockQueryJobConfig):
+        """A 409 on a terminally failed job attaches to it and reports it onward.
+
+        _submit_or_attach never resubmits; only the caller decides whether the
+        failure is worth another attempt.
+        """
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "job_dead"
+        self.mock_client.query.side_effect = exceptions.Conflict(
+            f"Already Exists: Job project:{dead_job_id}"
+        )
+        dead_job = Mock(
+            job_id=dead_job_id,
+            location="US",
+            project="project",
+            state="DONE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+        dead_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = dead_job
+        submitted = []
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=dead_job_id,
+            on_job_submitted=submitted.append,
+        )
+
+        self.assertIs(query_job, dead_job)
+        self.assertEqual(submitted, [dead_job])
+        self.assertEqual(self.mock_client.query.call_count, 1)
+        self.mock_client.get_job.assert_called_once_with(dead_job_id)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_resubmits_after_terminal_backend_error(self, MockQueryJobConfig):
+        """A terminal backendError is retried under a fresh job_id, not reattached.
+
+        The dead job is already in hand, so the retry skips the 409 round-trip.
+        """
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+        first_job_id = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            job = Mock(job_id=submitted_id, location="US", project="project")
+
+            if not first_job_id:
+                first_job_id["id"] = submitted_id
+                job.state = "DONE"
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+                job.result.side_effect = exceptions.InternalServerError(
+                    "Error encountered during execution. Retrying may solve the problem.; "
+                    "reason: backendError"
+                )
+                return job
+
+            if submitted_id == first_job_id["id"]:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+
+        self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> dies, submit(B) -> succeeds. A is never resubmitted.
+        self.assertEqual(len(job_ids_used), 2)
+        self.assertNotEqual(job_ids_used[1], job_ids_used[0])
+        self.mock_client.get_job.assert_not_called()
+
+    @patch("google.api_core.retry.retry_unary.time.sleep")
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_attaches_to_resubmitted_job_on_later_retry(
+        self, MockQueryJobConfig, _mock_sleep
+    ):
+        """After resubmitting dead job A as B, later retries attach to B, not a new job."""
+        self.credentials.job_retries = 2
+        self.credentials.job_retry_deadline_seconds = 600
+        self.connections._retry = RetryFactory(self.credentials)
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        retryable_error = exceptions.InternalServerError(
+            "Error encountered during execution. Retrying may solve the problem.; "
+            "reason: backendError"
+        )
+        job_ids_used = []
+        jobs = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id in jobs:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.statement_type = "MERGE"
+            if not jobs:
+                job.state = "DONE"
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+            else:
+                job.state = "DONE"
+                job.error_result = None
+            job.result.side_effect = retryable_error
+            jobs[submitted_id] = job
+            return job
+
+        def get_job(job_id, *args, **kwargs):
+            job = jobs[job_id]
+            if job.error_result is None:
+                job.result.side_effect = None
+                job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = get_job
+
+        self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> dies, submit(B) -> polling fails, submit(B) -> 409 -> attach
+        # to B, whose id is kept because it is not known-dead. Never a third job.
+        job_a, job_b = list(jobs)
+        self.assertEqual(job_ids_used, [job_a, job_b, job_b])
+
+    @patch("google.api_core.retry.retry_unary.time.sleep")
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_attaches_to_resubmitted_job_after_lost_insert_response(
+        self, MockQueryJobConfig, _mock_sleep
+    ):
+        """If B's insert lands but its response is lost, the retry attaches to B.
+
+        Minting B must forget dead job A, or the next retry still sees A and
+        starts a third job alongside the live B.
+        """
+        self.credentials.job_retries = 2
+        self.credentials.job_retry_deadline_seconds = 600
+        self.connections._retry = RetryFactory(self.credentials)
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+        jobs = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id in jobs:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.statement_type = "MERGE"
+            job.state = "DONE"
+            jobs[submitted_id] = job
+            if len(jobs) == 1:
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+                job.result.side_effect = exceptions.InternalServerError(
+                    "Error encountered during execution. Retrying may solve the problem.; "
+                    "reason: backendError"
+                )
+                return job
+
+            # B is created server-side, but the insert response never arrives.
+            job.error_result = None
+            job.result.return_value = iter([])
+            raise Timeout("insert response lost")
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = lambda job_id, *args, **kwargs: jobs[job_id]
+
+        query_job, _ = self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> dies, submit(B) -> lost response, submit(B) -> 409 ->
+        # attach to B. Never a third job.
+        job_a, job_b = list(jobs)
+        self.assertEqual(job_ids_used, [job_a, job_b, job_b])
+        self.assertIs(query_job, jobs[job_b])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_reuses_job_id_when_job_may_still_be_running(self, MockQueryJobConfig):
+        """A retryable error on a job that is not known-dead keeps the job_id.
+
+        The job may still be running, so the next attempt must 409 onto it.
+        """
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+        jobs = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id in jobs:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            # Still RUNNING: the polling error says nothing about job health.
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.state = "RUNNING"
+            job.error_result = None
+            job.result.side_effect = exceptions.ServiceUnavailable("Service unavailable")
+            jobs[submitted_id] = job
+            return job
+
+        def get_job(job_id, *args, **kwargs):
+            job = jobs[job_id]
+            job.result.side_effect = None
+            job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = get_job
+
+        query_job, _ = self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        (job_a,) = list(jobs)
+        self.assertEqual(job_ids_used, [job_a, job_a])
+        self.assertIs(query_job, jobs[job_a])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_retries_failed_script_under_fresh_job_id(self, MockQueryJobConfig):
+        """A dead SCRIPT job is not special-cased: it is retried like any other.
+
+        Re-running replays statements that already committed, which every
+        dbt-generated script tolerates, as a plain `dbt retry` already relies on.
+        """
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.statement_type = "SCRIPT"
+
+            if len(job_ids_used) == 1:
+                job.state = "DONE"
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+                job.result.side_effect = exceptions.InternalServerError(
+                    "Error encountered during execution. Retrying may solve the problem.; "
+                    "reason: backendError"
+                )
+                return job
+
+            job.state = "DONE"
+            job.error_result = None
+            job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+
+        self.connections.raw_execute(
+            "DECLARE partitions ARRAY<DATE>; ... MERGE ...; DROP TABLE ...;"
+        )
+
+        self.assertEqual(len(job_ids_used), 2)
+        self.assertNotEqual(job_ids_used[1], job_ids_used[0])
+        self.mock_client.get_job.assert_not_called()
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_raw_execute_no_retry_on_non_retryable_error(self, MockQueryJobConfig):
@@ -309,6 +688,30 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # profile timeout is 1, so polling timeout = 1 + 30 = 31
         self.assertEqual(call_kwargs["timeout"], 31)
 
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_uses_polling_retry(self, MockQueryJobConfig):
+        """query_job.result() should receive a retry built from create_query_job_polling_retry,
+        not a raw DEFAULT_JOB_RETRY.with_timeout(execution_timeout)."""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        with patch.object(
+            self.connections._retry,
+            "create_query_job_polling_retry",
+            wraps=self.connections._retry.create_query_job_polling_retry,
+        ) as spy:
+            self.connections._query_and_results(
+                self.mock_connection,
+                "SELECT 1",
+                {"dry_run": False},
+                job_id="test_job",
+            )
+            spy.assert_called_once_with(mock_job)
+
+        call_kwargs = mock_job.result.call_args[1]
+        self.assertIn("retry", call_kwargs)
+
     def test_copy_bq_table_respects_model_timeout(self):
         """Test that copy_bq_table uses the model-level timeout when set"""
         mock_copy_job = Mock()
@@ -330,3 +733,424 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         # Clean up
         self.mock_connection._bq_model_timeout = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_uses_credential_reservation(self, MockQueryJobConfig):
+        """Test that reservation from credentials flows into job_params"""
+        self.credentials.reservation = (
+            "projects/project1/locations/US/reservations/test-reservation"
+        )
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = None
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/test-reservation",
+        )
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_uses_model_reservation(self, MockQueryJobConfig):
+        """Test that a model-level reservation stored on the connection flows into job_params"""
+        self.credentials.reservation = None
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = (
+            "projects/project1/locations/US/reservations/model-reservation"
+        )
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/model-reservation",
+        )
+        # Clean up
+        self.mock_connection._bq_model_reservation = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_model_reservation_overrides_credential(self, MockQueryJobConfig):
+        """Test that model-level reservation takes priority over credential-level"""
+        self.credentials.reservation = (
+            "projects/project1/locations/US/reservations/credential-reservation"
+        )
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = (
+            "projects/project1/locations/US/reservations/model-reservation"
+        )
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/model-reservation",
+        )
+        # Clean up
+        self.mock_connection._bq_model_reservation = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_no_reservation_when_not_set(self, MockQueryJobConfig):
+        """Test that reservation is absent from job_params when not configured"""
+        self.credentials.reservation = None
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = None
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertNotIn("reservation", call_kwargs)
+
+
+class TestTerminalJobAwarePredicate(unittest.TestCase):
+    """Unit tests for the _TerminalJobAwarePredicate used in query_job.result() polling."""
+
+    def _make_internal_error(self):
+        """Reproduce the Tyson error: 400 with reason=internalError."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.BadRequest(
+            "internal error during execution",
+            errors=[{"reason": "internalError"}],
+        )
+
+    def _make_non_retryable_error(self):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.BadRequest("syntax error", errors=[{"reason": "invalidQuery"}])
+
+    def _make_rate_limit_error(self):
+        """Reproduce the reported getQueryResults rate-limit error."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.Forbidden(
+            "Exceeded rate limits: too many api requests per user per method",
+            errors=[{"reason": "rateLimitExceeded"}],
+        )
+
+    def test_short_circuits_on_terminal_failed_job(self):
+        """Core regression test: internalError on a DONE+failed job must not retry."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "DONE"
+        mock_job.error_result = {"reason": "internalError", "message": "internal error"}
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+        mock_job.reload.assert_called_once()
+
+    def test_retries_when_job_still_running(self):
+        """A retryable error on a still-running job should be retried."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_job.reload.assert_called_once()
+
+    def test_continues_retrying_on_running_job(self):
+        """Predicate should continue allowing retries while the job is still running."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=1)
+
+        self.assertTrue(predicate(self._make_internal_error()))
+        self.assertTrue(predicate(self._make_internal_error()))
+        self.assertTrue(predicate(self._make_internal_error()))
+
+    def test_no_retry_when_retries_zero(self):
+        """job_retries=0 means never retry, and skips the jobs.get reload call."""
+        mock_job = Mock()
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=0)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+        mock_job.reload.assert_not_called()
+
+    def test_non_retryable_error_skips_reload(self):
+        """Non-retryable errors should bail out immediately without calling job.reload()."""
+        mock_job = Mock()
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_non_retryable_error())
+
+        self.assertFalse(result)
+        mock_job.reload.assert_not_called()
+
+    def test_rate_limit_error_retries_without_reload(self):
+        """A rate-limit error says nothing about job health: retry without the
+        extra jobs.get reload, so we don't add pressure to the rate limit."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_rate_limit_error())
+
+        self.assertTrue(result)
+        mock_job.reload.assert_not_called()
+
+    def test_retry_path_logs_debug(self):
+        """The continue-polling path should emit a debug line for observability."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_rate_limit_error())
+
+        self.assertTrue(result)
+        mock_logger.debug.assert_called_once()
+
+    def test_reload_expected_api_error_logs_warning(self):
+        """Expected API errors during reload() log at warning and fall through."""
+        from google.api_core.exceptions import InternalServerError
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = InternalServerError("jobs.get is flaky")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called_once()
+
+    def test_reload_transport_error_logs_warning(self):
+        """Expected transport errors during reload() log at warning and fall through."""
+        from requests.exceptions import ConnectionError as RequestsConnectionError
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = RequestsConnectionError("connection reset")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called_once()
+
+    def test_reload_unexpected_error_logs_warning(self):
+        """Unexpected exceptions during reload() (auth bugs, programming errors)
+        log at warning level but still fall through to retry rather than crashing."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = ValueError("programming error")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called_once()
+
+    def test_terminal_job_wins_over_remaining_retries(self):
+        """Even if retries budget remains, terminal job state stops polling."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "DONE"
+        mock_job.error_result = {"reason": "internalError"}
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=10)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+
+
+class TestRetryFactoryPollingRetry(unittest.TestCase):
+    """Behavior tests for RetryFactory.create_query_job_polling_retry.
+
+    These tests exercise the returned Retry object against a stub callable
+    rather than asserting on private Retry internals (e.g. ``_deadline``,
+    ``_predicate``), which are not part of google-api-core's public API.
+    """
+
+    def _make_credentials(
+        self, job_retries=3, job_retry_deadline_seconds=None, job_execution_timeout_seconds=28800
+    ):
+        creds = Mock(spec=BigQueryCredentials)
+        creds.job_retries = job_retries
+        creds.job_retry_deadline_seconds = job_retry_deadline_seconds
+        creds.job_execution_timeout_seconds = job_execution_timeout_seconds
+        creds.job_creation_timeout_seconds = 60
+        return creds
+
+    def _make_internal_error(self):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.BadRequest(
+            "internal error during execution",
+            errors=[{"reason": "internalError"}],
+        )
+
+    def _make_rate_limit_error(self):
+        """Reproduce the reported getQueryResults rate-limit error."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.Forbidden(
+            "Exceeded rate limits: too many api requests per user per method "
+            "for this user_method (JobService.getQueryResults)",
+            errors=[{"reason": "rateLimitExceeded"}],
+        )
+
+    def test_rate_limit_on_running_job_retries_beyond_job_retries_then_succeeds(self):
+        """Regression test for #1957: transient rateLimitExceeded errors on a
+        still-running job must be retried past the job_retries count and allowed
+        to succeed, rather than surfacing as a hard failure after job_retries.
+        """
+        creds = self._make_credentials(job_retries=1)
+        factory = RetryFactory(creds)
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        retry = factory.create_query_job_polling_retry(mock_job)
+        err = self._make_rate_limit_error()
+
+        call_count = {"n": 0}
+
+        def fail_then_succeed():
+            call_count["n"] += 1
+            # Fail more times than job_retries (1) before succeeding.
+            if call_count["n"] <= 5:
+                raise err
+            return "results"
+
+        # Patch sleep so exponential backoff doesn't slow the test down.
+        with patch("time.sleep"):
+            result = retry(fail_then_succeed)()
+
+        self.assertEqual(result, "results")
+        self.assertEqual(
+            call_count["n"],
+            6,
+            "Transient rate-limit errors must retry past job_retries until success",
+        )
+
+    def test_internal_error_on_running_job_retries_beyond_job_retries(self):
+        """A still-running job hitting transient internalError is retried well
+        beyond the job_retries count (no attempt cap on the polling retry)."""
+        creds = self._make_credentials(job_retries=2)
+        factory = RetryFactory(creds)
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        retry = factory.create_query_job_polling_retry(mock_job)
+        err = self._make_internal_error()
+
+        call_count = {"n": 0}
+
+        def fail_then_succeed():
+            call_count["n"] += 1
+            if call_count["n"] <= 4:  # > 1 initial + 2 retries
+                raise err
+            return "results"
+
+        with patch("time.sleep"):
+            result = retry(fail_then_succeed)()
+
+        self.assertEqual(result, "results")
+        self.assertGreater(call_count["n"], 3)
+
+    def test_retry_short_circuits_on_terminal_failed_job(self):
+        """Tyson regression: a terminal failed job should fail on the first attempt."""
+        creds = self._make_credentials(job_retries=5)
+        factory = RetryFactory(creds)
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "DONE"
+        mock_job.error_result = {"reason": "internalError"}
+
+        retry = factory.create_query_job_polling_retry(mock_job)
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        err = self._make_internal_error()
+
+        call_count = {"n": 0}
+
+        def always_fail():
+            call_count["n"] += 1
+            raise err
+
+        with self.assertRaises(exceptions.BadRequest):
+            retry(always_fail)()
+
+        self.assertEqual(call_count["n"], 1, "Terminal-failed job should not be retried at all")
+
+    @patch("dbt.adapters.bigquery.retry.DEFAULT_JOB_RETRY")
+    def test_factory_passes_job_retry_deadline_seconds_to_retry(self, mock_retry):
+        """Deadline plumbing: job_retry_deadline_seconds (not job_execution_timeout_seconds)
+        is what gets passed to Retry.with_deadline().
+
+        Mocks at the SDK boundary (the public with_predicate / with_deadline
+        chain) instead of reading private Retry internals like ``_deadline``.
+        """
+        creds = self._make_credentials(
+            job_retry_deadline_seconds=300,
+            job_execution_timeout_seconds=28800,
+        )
+        factory = RetryFactory(creds)
+        factory.create_query_job_polling_retry(Mock())
+
+        chained = mock_retry.with_predicate.return_value
+        chained.with_deadline.assert_called_once_with(300)
+        chained.with_deadline.return_value.with_delay.assert_called_once_with(
+            initial=5.0,
+            maximum=60.0,
+            multiplier=2.0,
+        )
+
+    @patch("dbt.adapters.bigquery.retry.DEFAULT_JOB_RETRY")
+    def test_factory_falls_back_to_default_deadline(self, mock_retry):
+        """When job_retry_deadline_seconds is unset, default to the 600s fallback,
+        NOT to job_execution_timeout_seconds.
+        """
+        creds = self._make_credentials(
+            job_retry_deadline_seconds=None,
+            job_execution_timeout_seconds=28800,
+        )
+        factory = RetryFactory(creds)
+        factory.create_query_job_polling_retry(Mock())
+
+        chained = mock_retry.with_predicate.return_value
+        chained.with_deadline.assert_called_once_with(600)
+        chained.with_deadline.return_value.with_delay.assert_called_once_with(
+            initial=5.0,
+            maximum=60.0,
+            multiplier=2.0,
+        )

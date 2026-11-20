@@ -35,7 +35,9 @@ class Column:
 
     @property
     def quoted(self) -> str:
-        return '"{}"'.format(self.column)
+        # Column names can come from the warehouse, so an embedded quote is doubled to keep
+        # the name a single identifier.
+        return '"{}"'.format(str(self.column).replace('"', '""'))
 
     @property
     def data_type(self) -> str:

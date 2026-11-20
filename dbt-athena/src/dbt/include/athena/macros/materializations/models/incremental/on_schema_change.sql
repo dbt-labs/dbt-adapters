@@ -1,6 +1,6 @@
 {% macro sync_column_schemas(on_schema_change, target_relation, schema_changes_dict) %}
   {%- set partitioned_by = config.get('partitioned_by', default=none) -%}
-  {% set table_type = config.get('table_type', default='hive') | lower %}
+  {% set table_type = resolve_table_type() %}
   {%- if partitioned_by is none -%}
       {%- set partitioned_by = [] -%}
   {%- endif %}
@@ -63,24 +63,24 @@
     3. Drop the existing column
     4. Rename the new column to existing column
   #}
-  {%- set table_type = config.get('table_type', 'hive') -%}
+  {%- set table_type = resolve_table_type() -%}
   {%- set tmp_column = column_name + '__dbt_alter' -%}
   {%- set new_ddl_data_type = ddl_data_type(new_column_type, table_type) -%}
 
   {#- do alter_relation_add_columns(relation, [ tmp_column ], table_type) -#}
   {%- set add_column_query -%}
-    alter {{ relation.type }} {{ relation.render_pure() }} add columns({{ tmp_column }} {{ new_ddl_data_type }});
+    alter {{ relation.type }} {{ relation.render_pure() }} add columns(`{{ tmp_column | replace('`', '``') }}` {{ new_ddl_data_type }});
   {%- endset -%}
   {%- do run_query(add_column_query) -%}
 
   {%- set update_query -%}
-    update {{ relation.render_pure() }} set {{ tmp_column }} = cast({{ column_name }} as {{ new_column_type }});
+    update {{ relation.render_pure() }} set {{ adapter.quote(tmp_column) }} = cast({{ adapter.quote(column_name) }} as {{ new_column_type }});
   {%- endset -%}
   {%- do run_query(update_query) -%}
 
   {#- do alter_relation_drop_columns(relation, [ column_name ]) -#}
   {%- set drop_column_query -%}
-    alter {{ relation.type }} {{ relation.render_pure() }} drop column {{ column_name }};
+    alter {{ relation.type }} {{ relation.render_pure() }} drop column `{{ column_name | replace('`', '``') }}`;
   {%- endset -%}
   {%- do run_query(drop_column_query) -%}
 

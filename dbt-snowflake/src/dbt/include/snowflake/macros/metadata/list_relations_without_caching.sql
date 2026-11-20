@@ -76,6 +76,6 @@ show objects in {{ schema }}
         {%- set schema = schema_relation.include(identifier=False) -%}
     {%- endif -%}
 
-    {%- do return(run_query("show functions in " ~ schema)) -%}
+    {%- do return(run_query("show user functions in " ~ schema)) -%}
 
 {% endmacro %}

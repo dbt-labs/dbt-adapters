@@ -125,7 +125,7 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_MISSING_COL}
 
     def test_missing_column(self, project):
         run_dbt(["docs", "generate"])
@@ -144,6 +144,114 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
             "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
             in logs
         )
+
+
+class BasePersistDocsAllColumnsMissing(BasePersistDocsBase):
+    """Every documented column is invalid. The run must succeed and warn about all missing columns."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"all_columns_missing.sql": fixtures._MODELS__ALL_COLUMNS_MISSING}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_ALL_COLUMNS_MISSING}
+
+    def test_all_columns_missing_does_not_crash(self, project):
+        results, logs = run_dbt_and_capture(["run"])
+        assert len(results) == 1
+        assert results[0].status == "success"
+        assert "bogus_col_one" in logs
+        assert "bogus_col_two" in logs
+
+
+class BasePersistDocsQuotedColumnCaseSensitive(BasePersistDocsBase):
+    """With quote: true, identifier comparison must be case-sensitive."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"quoted_case_sensitive.sql": fixtures._MODELS__QUOTED_CASE_SENSITIVE}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_QUOTED_CASE_SENSITIVE}
+
+    def test_quoted_column_case_sensitive_warning(self, project):
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: MyCol"
+            in logs
+        )
+
+
+class BasePersistDocsQuotedDescriptionNotAppliedOnMismatch(BasePersistDocsBase):
+    """With quote: true and case-mismatched physical column, the documented description
+    must not be applied to a differently-cased physical column even though
+    case-insensitive lookup in adapter-specific comment SQL would otherwise match it."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "quoted_physical_case_mismatch.sql": fixtures._MODELS__QUOTED_PHYSICAL_CASE_MISMATCH
+        }
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_QUOTED_PHYSICAL_CASE_MISMATCH}
+
+    def test_quoted_description_not_applied_on_case_mismatch(self, project):
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: mycol"
+            in logs
+        )
+        run_dbt(["docs", "generate"])
+        catalog_path = os.path.join(project.project_root, "target", "catalog.json")
+        with open(catalog_path) as fp:
+            catalog_data = json.load(fp)
+        node = catalog_data["nodes"]["model.test.quoted_physical_case_mismatch"]
+        for col_name, col_meta in node["columns"].items():
+            comment = col_meta.get("comment") or ""
+            assert "DOCUMENTED_DESCRIPTION_SENTINEL" not in comment, (
+                f"Documented description was applied to physical column {col_name!r} "
+                f"despite case mismatch + quote: true on documented identifier."
+            )
 
 
 class BasePersistDocsCommentOnQuotedColumn:
@@ -196,6 +304,20 @@ class TestPersistDocs(BasePersistDocs):
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
+    pass
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
     pass
 
 

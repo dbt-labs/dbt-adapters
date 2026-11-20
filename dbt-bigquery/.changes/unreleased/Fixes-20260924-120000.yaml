@@ -1,0 +1,6 @@
+kind: Fixes
+body: Prevent repeated snapshot history rows when BigQuery check_cols casing differs from the existing column.
+time: 2026-09-24T12:00:00.000000+05:30
+custom:
+  Author: itsnamangoyal
+  Issue: "2185"

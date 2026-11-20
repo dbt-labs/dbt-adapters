@@ -54,8 +54,10 @@
     {{ get_assert_columns_equivalent(sql) }}
     {%- set sql = get_select_subquery(sql) %}
     {% if backup == false -%}backup no{%- endif %}
+    {%- if not temporary %}
     {{ dist(_dist) }}
     {{ sort(_sort_type, _sort) }}
+    {%- endif %}
   ;
 
   insert into {{ relation.include(database=(not temporary), schema=(not temporary)) }}
@@ -69,8 +71,10 @@
   create {% if temporary -%}temporary{%- endif %} table
     {{ relation.include(database=(not temporary), schema=(not temporary)) }}
     {% if backup == false -%}backup no{%- endif %}
+    {%- if not temporary %}
     {{ dist(_dist) }}
     {{ sort(_sort_type, _sort) }}
+    {%- endif %}
   as (
     {{ sql }}
   );
@@ -119,15 +123,64 @@
 {% endmacro %}
 
 
-{% macro redshift__get_columns_in_relation(relation) -%}
-  {# relation from temp tables does not have a database or schema. #}
-  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+{% macro redshift__make_temp_relation(base_relation, suffix) %}
+  {#
+    Same relation postgres__make_temp_relation builds -- fully unqualified, with both
+    schema and database stripped to none -- but flagged as one dbt minted itself, so
+    RedshiftAdapter.get_columns_in_relation can describe it from the driver directly when
+    `datasharing` is enabled. Without the flag we could only infer "temporary" from the
+    absence of a database and schema, which is a negative signal shared with any other
+    unqualified caller.
 
-  {% if redshift__use_show_apis() and relation.database and relation.schema %}
+    The flag is set unconditionally; whether it is acted on is decided in Python, so the
+    marker stays a plain statement of what the relation is.
+  #}
+  {% set temp_relation = postgres__make_temp_relation(base_relation, suffix) %}
+  {{ return(temp_relation.incorporate(is_temporary=True)) }}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation(relation) -%}
+  {# With `datasharing` enabled, relations dbt minted as temp tables do not reach here: #}
+  {# RedshiftAdapter.get_columns_in_relation recognises their is_temporary marker and #}
+  {# describes them from the driver instead, because no catalog view on a datashare consumer #}
+  {# can see them. Everything else -- including temp relations on an ordinary connection, #}
+  {# where information_schema can see them -- comes through the branches below. #}
+
+  {% if not relation.database and not relation.schema %}
+    {{ return(redshift__get_columns_in_relation_unqualified(relation)) }}
+  {% elif redshift__use_show_apis() %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
   {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_unqualified(relation) -%}
+  {# An unqualified relation is most likely a temp table, which can never be a late-binding #}
+  {# or external view, so try without pg_get_late_binding_view_cols() first -- it expands #}
+  {# every late-binding view in the session and dominates the legacy query's runtime. #}
+  {# Fall back to the legacy query if nothing matches, for any other caller. #}
+  {% call statement('get_columns_in_relation', fetch_result=True) %}
+      select
+        column_name,
+        data_type,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
+
+      from information_schema."columns"
+      where table_name = '{{ relation.identifier }}'
+      order by ordinal_position
+  {% endcall %}
+  {% set table = load_result('get_columns_in_relation').table %}
+  {% set columns = sql_convert_columns_in_relation(table) %}
+
+  {% if columns %}
+    {{ return(columns) }}
+  {% endif %}
+  {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
 {% endmacro %}
 
 

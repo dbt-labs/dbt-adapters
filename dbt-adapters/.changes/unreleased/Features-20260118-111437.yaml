@@ -1,0 +1,6 @@
+kind: Features
+body: Update unit test column retrieval to support pseudocolumns
+time: 2026-01-18T11:14:37.820863-05:00
+custom:
+    Author: katieclaiborne-duet
+    Issue: "1517"

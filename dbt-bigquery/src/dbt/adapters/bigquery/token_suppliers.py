@@ -8,6 +8,21 @@ from dbt.adapters.exceptions import FailedToConnectError
 from google.auth.external_account import SupplierContext
 from google.auth.transport import Request
 from dbt_common.exceptions import DbtRuntimeError
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Retry transient identity provider failures (throttling, 5xx, dropped connections) with
+# exponential backoff, honoring Retry-After. Token requests are client credentials grants,
+# so re-sending the POST is safe. Once retries are exhausted, the last response is returned
+# so the error handling in handle_request still applies.
+_IDP_REQUEST_RETRY = Retry(
+    total=3,
+    backoff_factor=1.0,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"POST"}),
+    raise_on_status=False,
+)
+_IDP_REQUEST_TIMEOUT_SECONDS = 30
 
 
 class TokenServiceBase(ABC):
@@ -29,9 +44,18 @@ class TokenServiceBase(ABC):
 
     def handle_request(self) -> requests.Response:
         """
-        Handles the request with rate limiting and error handling.
+        Handles the request with retries, rate limiting and error handling.
         """
-        response = requests.post(self.url, headers=self.build_header_payload(), data=self.data)
+        with requests.Session() as session:
+            adapter = HTTPAdapter(max_retries=_IDP_REQUEST_RETRY)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            response = session.post(
+                self.url,
+                headers=self.build_header_payload(),
+                data=self.data,
+                timeout=_IDP_REQUEST_TIMEOUT_SECONDS,
+            )
 
         if response.status_code == 429:
             raise DbtRuntimeError(

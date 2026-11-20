@@ -4,8 +4,11 @@ import json
 from dbt.tests.adapter.materialized_view import files
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocs,
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsColumnMissing,
     BasePersistDocsCommentOnQuotedColumn,
+    BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 from tests.functional.utils import run_dbt
 
@@ -35,6 +38,20 @@ class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
+    pass
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
     pass
 
 

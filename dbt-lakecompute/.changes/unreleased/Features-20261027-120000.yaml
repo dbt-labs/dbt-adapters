@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add dbt-lakecompute table materialization, column metadata, ported cross-database utility macros, and guards that fail unsupported materializations, including views, with an error naming the model. Cache newly built tables before post-hooks, enforce nested element types and struct field names in model contracts, ignore grants and persist_docs as v2 does, and find relations the schema listing misses with a targeted describe.'
+time: 2026-10-27T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: ""

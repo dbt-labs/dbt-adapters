@@ -1,0 +1,9 @@
+kind: Fixes
+body: Stop emitting a spurious snapshot timestamp data type warning when hard_deletes resolves
+    to ignore. snapshot_get_time only feeds the SCD timestamp columns under hard_deletes invalidate
+    or new_record, so the comparison against the updated_at-derived column was a false positive
+    for the default configuration
+time: 2026-09-14T14:43:19.190644-05:00
+custom:
+    Author: HannanNaeem
+    Issue: "fs-14450"

@@ -16,6 +16,23 @@
   {{ return(columns) }}
 {% endmacro %}
 
+{% macro get_columns_for_unit_tests(relation) -%}
+  {{ return(adapter.dispatch('get_columns_for_unit_tests', 'dbt')(relation)) }}
+{% endmacro %}
+
+{% macro default__get_columns_for_unit_tests(relation) -%}
+  {#-- Get native columns from information schema --#}
+  {% set columns = adapter.get_columns_in_relation(relation) %}
+
+  {#-- Add pseudocolumns that are queryable but not in information schema --#}
+  {% set pseudocolumns = adapter.get_pseudocolumns_for_relation(relation) %}
+
+  {#-- Merge two lists --#}
+  {% set all_columns = columns + pseudocolumns %}
+
+  {{ return(all_columns) }}
+{% endmacro %}
+
 {%- macro get_list_of_column_names(columns) -%}
   {% set col_names = [] %}
   {% for col in columns %}

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix persist_docs and relation caching for dbt clone of Snowflake Iceberg tables, and drop an existing target when cloning between Iceberg and regular table formats
+time: 2026-10-14T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "1767"

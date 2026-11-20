@@ -47,6 +47,17 @@ class RedshiftRelation(BaseRelation):
         )
     )
 
+    # Marks a relation dbt itself minted as a temporary table; set by
+    # redshift__make_temp_relation. There is no temp-flavored RelationType and no
+    # is_temporary on BaseRelation, so the flag has to live here. It lets
+    # RedshiftAdapter.get_columns_in_relation go straight to the driver instead of
+    # spending two slow catalog queries proving that the catalog cannot see the
+    # relation -- on a datashare consumer database it never can.
+    #
+    # A declared dataclass field survives incorporate() (to_dict(omit_none=True) ->
+    # deep_merge -> from_dict), and False is not None, so omit_none does not drop it.
+    is_temporary: bool = False
+
     def __post_init__(self):
         # Check for length of Redshift table/view names.
         # Check self.type to exclude test relation identifiers
@@ -79,6 +90,13 @@ class RedshiftRelation(BaseRelation):
         cls, relation_results: RelationResults, relation_config: RelationConfig
     ) -> Optional[RedshiftMaterializedViewConfigChangeset]:
         config_change_collection = RedshiftMaterializedViewConfigChangeset()
+
+        # svv_table_info returns no rows for materialized views with no data.
+        # In this case we cannot compare configurations, so return None to trigger
+        # a simple refresh instead of crashing.
+        mv_table = relation_results.get("materialized_view")
+        if not mv_table or len(mv_table.rows) == 0:
+            return None
 
         existing_materialized_view = RedshiftMaterializedViewConfig.from_relation_results(
             relation_results

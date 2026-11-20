@@ -32,7 +32,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: string
-                default: "3.10"
+                default: "3.11"
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -47,6 +47,7 @@ on:
                     - "dbt-athena"
                     - "dbt-athena-community"
                     - "dbt-bigquery"
+                    - "dbt-lakecompute"
                     - "dbt-postgres"
                     - "dbt-redshift"
                     - "dbt-snowflake"
@@ -66,7 +67,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+                options: ["3.11", "3.12", "3.13", "3.14"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -84,6 +85,12 @@ jobs:
         runs-on: ${{ inputs.os }}
         name: "unit-tests - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
+            # pip's git clone of dbt-core checks out the default branch before switching refs,
+            # and dbt-core main has paths longer than the Windows 260-character limit
+            - name: "Enable git long paths on Windows"
+              run: git config --system core.longpaths true
+              if: runner.os == 'Windows'
+
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:

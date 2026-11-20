@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'Align Lake Compute profile settings with v2: remove driver_path, warehouse, dialect, timeout_seconds, retries, and query_comment_enabled; honor the standard project query-comment setting, report connection failures without retrying, and use the v2 base URL and Fivetran API URL driver options.'
+time: 2026-10-30T18:02:15.18103+05:30
+custom:
+    Author: tauhid621
+    Issue: ''

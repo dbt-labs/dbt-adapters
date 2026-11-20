@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixed a jinja syntax issue in athena__persist_docs macro
+time: 2026-05-20T21:35:39.029633+05:30
+custom:
+    Author: sriramr98
+    Issue: NA

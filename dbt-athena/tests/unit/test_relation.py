@@ -21,6 +21,16 @@ class TestRelation:
                 },
                 TableType.ICEBERG,
             ),
+            # S3 Tables tables report a "customer" TableType that is not in RELATION_TYPE_MAP.
+            # The iceberg `table_type` parameter must take precedence so they classify correctly.
+            (
+                {
+                    "Name": "n",
+                    "TableType": "customer",
+                    "Parameters": {"table_type": "ICEBERG"},
+                },
+                TableType.ICEBERG,
+            ),
         ],
     )
     def test__get_relation_type(self, table, expected):
@@ -60,3 +70,13 @@ class TestAthenaRelation:
             schema=DATABASE_NAME,
         )
         assert relation.render_pure() == f"{DATA_CATALOG_NAME}.{DATABASE_NAME}.{TABLE_NAME}"
+
+    def test_render_escapes_embedded_quote_characters(self):
+        relation = AthenaRelation.create(
+            identifier='a"b`c',
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+        )
+        assert relation.render() == f'"{DATA_CATALOG_NAME}"."{DATABASE_NAME}"."a""b`c"'
+        assert relation.render_hive() == f'`{DATABASE_NAME}`.`a"b``c`'
+        assert relation.render_pure() == f'{DATA_CATALOG_NAME}.{DATABASE_NAME}.a"b`c'
