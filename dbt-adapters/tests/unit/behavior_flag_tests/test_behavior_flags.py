@@ -74,3 +74,8 @@ def test_behaviour_flags_property_empty(adapter_default_behaviour_flags):
 def test_behavior_property_has_defaults(adapter_default_behaviour_flags):
     for flag in DEFAULT_BASE_BEHAVIOR_FLAGS:
         assert hasattr(adapter_default_behaviour_flags.behavior, flag["name"])
+
+
+def test_adapter_flags_do_not_leak_into_defaults(adapter, behavior_flags):
+    default_names = {flag["name"] for flag in DEFAULT_BASE_BEHAVIOR_FLAGS}
+    assert not default_names & {flag["name"] for flag in behavior_flags}

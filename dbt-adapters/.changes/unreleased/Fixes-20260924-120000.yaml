@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop adapter init from appending its behavior flags to DEFAULT_BASE_BEHAVIOR_FLAGS
+time: 2026-09-24T12:00:00.000000+00:00
+custom:
+    Author: axellpadilla
+    Issue: "2183"
