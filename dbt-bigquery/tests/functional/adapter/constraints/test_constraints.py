@@ -41,6 +41,9 @@ from tests.functional.adapter.constraints.fixtures import (
     model_double_struct_data_type_schema_yml,
     my_model_struct_sql,
     model_struct_schema_yml,
+    my_model_array_of_struct_sql,
+    my_model_struct_with_array_of_struct_sql,
+    model_array_of_struct_schema_yml,
 )
 
 from dbt.tests.util import run_dbt_and_capture, run_dbt
@@ -252,6 +255,22 @@ class TestBigQueryDoubleStructContract(BaseStructContract):
             "contract_struct_wrong.sql": my_model_double_struct_wrong_data_type_sql,
             "contract_struct_correct.sql": my_model_double_struct_correct_data_type_sql,
         }
+
+
+class TestBigQueryArrayOfStructContract:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "contract_array_of_struct_schema.yml": model_array_of_struct_schema_yml,
+            "contract_array_of_struct.sql": my_model_array_of_struct_sql,
+            "contract_struct_with_array_of_struct.sql": my_model_struct_with_array_of_struct_sql,
+        }
+
+    def test__array_of_struct_contract(self, project):
+        results = run_dbt(["run"])
+
+        assert len(results) == 2
+        assert all(result.node.config.contract.enforced for result in results)
 
 
 class TestBigQueryTableConstraintsRuntimeDdlEnforcement(BaseConstraintsRuntimeDdlEnforcement):
