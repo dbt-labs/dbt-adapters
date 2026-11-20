@@ -56,6 +56,24 @@
     {% if not dest_columns %}
       {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
     {% endif %}
+    {#-
+      The target relation exists, so an empty column list here is a metadata failure. Building
+      the strategy SQL with it would render an invalid `insert into <target> ()`.
+    -#}
+    {% if not dest_columns %}
+      {%- set empty_dest_columns_msg -%}
+        Could not read any columns for {{ existing_relation }} while building incremental model
+        {{ target_relation }} (on_schema_change='{{ on_schema_change }}').
+
+        This is a metadata failure rather than an empty table: {{ existing_relation }} already
+        exists, and dbt needs its columns to build the incremental insert or merge.
+
+        Workarounds:
+          - retry the run, if the warehouse's column metadata is only temporarily unavailable
+          - run the model with --full-refresh to rebuild it
+      {%- endset -%}
+      {% do exceptions.raise_compiler_error(empty_dest_columns_msg) %}
+    {% endif %}
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}

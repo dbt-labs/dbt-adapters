@@ -1,0 +1,6 @@
+kind: Fixes
+body: Raise a clear error instead of rendering `insert into <target> ()` when an incremental model can read no columns for the existing target relation, including with on_schema_change='ignore'.
+time: 2026-11-09T20:00:00.000000+01:00
+custom:
+  Author: Sam-Razavi
+  Issue: "2194"
