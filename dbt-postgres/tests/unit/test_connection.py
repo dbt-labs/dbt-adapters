@@ -11,8 +11,13 @@ from dbt.task.debug import DebugTask
 from dbt_common.exceptions import DbtConfigError
 from psycopg2 import DatabaseError, extensions as psycopg2_extensions
 
+from dbt.adapters.events.types import TypeCodeNotFound
 from dbt.adapters.postgres import Plugin as PostgresPlugin, PostgresAdapter
-from dbt.adapters.postgres.connections import PostgresCredentials
+from dbt.adapters.postgres.connections import (
+    PostgresConnectionManager,
+    PostgresCredentials,
+    TYPE_OID_TO_DATA_TYPE,
+)
 from tests.unit.utils import (
     clear_plugin,
     config_from_parts_or_dicts,
@@ -429,3 +434,43 @@ class TestAutocommitBehavior(TestCase):
             }
         )
         assert credentials.autocommit is False
+
+
+class TestDataTypeCodeToName(TestCase):
+    """Type names come from the driver first, then from the built-in table, then give up."""
+
+    def test_driver_registered_type_keeps_the_drivers_name(self):
+        # OID 25 is `text`. psycopg2 registers it, so the name is psycopg2's and unchanged.
+        assert (
+            PostgresConnectionManager.data_type_code_to_name(25)
+            == psycopg2_extensions.string_types[25].name
+        )
+
+    def test_builtin_type_the_driver_does_not_register_is_named(self):
+        assert PostgresConnectionManager.data_type_code_to_name(2950) == "uuid"
+        assert PostgresConnectionManager.data_type_code_to_name(2951) == "uuid[]"
+        assert PostgresConnectionManager.data_type_code_to_name(790) == "money"
+        assert PostgresConnectionManager.data_type_code_to_name(869) == "inet"
+
+    def test_the_table_never_shadows_the_driver(self):
+        # The table is a fallback for OIDs psycopg2 does not know; an overlap would mean a
+        # type's name depends on which lookup ran first.
+        assert not set(TYPE_OID_TO_DATA_TYPE) & set(psycopg2_extensions.string_types)
+
+    @mock.patch("dbt.adapters.postgres.connections.warn_or_error")
+    def test_known_type_codes_do_not_warn(self, mock_warn_or_error):
+        PostgresConnectionManager.data_type_code_to_name(25)
+        PostgresConnectionManager.data_type_code_to_name(2950)
+        mock_warn_or_error.assert_not_called()
+
+    @mock.patch("dbt.adapters.postgres.connections.warn_or_error")
+    def test_unknown_type_code_still_warns_and_returns_the_placeholder(self, mock_warn_or_error):
+        # A user-defined type (an enum, a domain, an extension type) has an OID assigned per
+        # database, so no table can name it. That path is unchanged.
+        assert (
+            PostgresConnectionManager.data_type_code_to_name(999999) == "unknown type_code 999999"
+        )
+        mock_warn_or_error.assert_called_once()
+        event = mock_warn_or_error.call_args[0][0]
+        assert isinstance(event, TypeCodeNotFound)
+        assert event.type_code == 999999
