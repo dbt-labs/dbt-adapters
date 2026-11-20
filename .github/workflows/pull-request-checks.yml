@@ -160,6 +160,34 @@ jobs:
             hatch-env: "ci"
         secrets: inherit
 
+    verify-build-python-315:
+        permissions: read-all
+        uses: ./.github/workflows/_verify-build.yml
+        needs: affected-packages
+        if: ${{ contains(fromJSON(needs.affected-packages.outputs.verify-build), 'dbt-adapters') }}
+        with:
+            package: "dbt-adapters"
+            branch: ${{ github.event.pull_request.head.sha }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: "3.15"
+        secrets: inherit
+
+    unit-tests-python-315:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/_unit-tests.yml
+        needs: affected-packages
+        if: ${{ contains(fromJSON(needs.affected-packages.outputs.unit-tests), 'dbt-adapters') }}
+        with:
+            package: "dbt-adapters"
+            branch: ${{ github.event.pull_request.head.sha }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: "3.15"
+            hatch-env: "default"
+        secrets: inherit
+
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         needs: affected-packages
@@ -189,7 +217,9 @@ jobs:
                 changelog-entry-check,
                 code-quality,
                 verify-build,
+                verify-build-python-315,
                 unit-tests,
+                unit-tests-python-315,
                 integration-tests,
             ]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -197,4 +227,4 @@ jobs:
             - uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # re-actors/alls-green@release/v1
               with:
                   jobs: ${{ toJSON(needs) }}
-                  allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"
+                  allowed-skips: "changelog-entry-check,verify-build,verify-build-python-315,unit-tests,unit-tests-python-315,integration-tests"

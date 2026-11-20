@@ -8,7 +8,8 @@ sources = ["src"]
 [envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "ddtrace<3.18",
+    # The pinned ddtrace releases do not support Python 3.15.
+    "ddtrace<3.18; python_version < '3.15'",
     'pre-commit==3.7.0',
     "pytest>=7.0,<10",
     "pytest-dotenv",
