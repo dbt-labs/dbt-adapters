@@ -165,15 +165,15 @@ class TestSnowflakeCloneMacros(unittest.TestCase):
         source = _relation("source_db")
         target = _relation("target_db")
         cases = [
-            ({}, "ignore grants"),
-            ({"copy_grants": False}, "ignore grants"),
-            ({"copy_grants": True}, "copy grants"),
+            ({}, ""),
+            ({"copy_grants": False}, " ignore grants"),
+            ({"copy_grants": True}, " copy grants"),
         ]
         for config, expected in cases:
             with self.subTest(config=config):
                 self.config = config
                 sql = re.sub(r"\s+", " ", create_or_replace_clone(target, source)).strip()
-                self.assertIn(f"clone source_db.analytics.my_model {expected}", sql)
+                self.assertTrue(sql.endswith(f"clone source_db.analytics.my_model{expected}"), sql)
 
     def test_full_refresh_drops_regular_table_and_clones_as_iceberg(self):
         existing = _relation("target_db")
