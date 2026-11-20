@@ -4,10 +4,7 @@
   {%- set grant_config = config.get('grants') -%}
 
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
-  {%- set target_relation = api.Relation.create(identifier=identifier,
-                                                schema=schema,
-                                                database=database,
-                                                type='table') -%}
+  {%- set target_relation = this.incorporate(type='table') -%}
 
   {{ run_hooks(pre_hooks) }}
 
