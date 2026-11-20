@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Use dbt.type_string and dbt.concat in default__snapshot_hash_arguments so adapters with non-PostgreSQL string types or concat syntax inherit the right behavior automatically
+time: 2026-05-19T14:43:47.000000+00:00
+custom:
+  Author: sdebruyn
+  Issue: "1950"
