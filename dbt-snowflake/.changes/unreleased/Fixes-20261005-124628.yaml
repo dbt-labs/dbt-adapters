@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop adding the query comment twice when `get_column_schema_from_query` runs a select, such as the snapshot column lookups
+time: 2026-10-05T12:46:28.196763-04:00
+custom:
+    Author: DG47
+    Issue: "688"
