@@ -1,5 +1,5 @@
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime
 from multiprocessing.context import SpawnContext
 import threading
@@ -34,6 +34,7 @@ from dbt_common.contracts.constraints import (
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.contracts.config.base import MergeBehavior
 from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
@@ -175,7 +176,9 @@ class BigqueryConfig(AdapterConfig):
     cluster_by: Optional[Union[List[str], str]] = None
     partition_by: Optional[Dict[str, Any]] = None
     kms_key_name: Optional[str] = None
-    labels: Optional[Dict[str, str]] = None
+    labels: Optional[Dict[str, str]] = dataclass_field(
+        default=None, metadata=MergeBehavior.Update.meta()
+    )
     partitions: Optional[List[str]] = None
     grant_access_to: Optional[List[Dict[str, str]]] = None
     hours_to_expiration: Optional[int] = None
