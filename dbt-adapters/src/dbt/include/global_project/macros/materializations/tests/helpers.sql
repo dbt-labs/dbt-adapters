@@ -8,8 +8,7 @@
       {{ fail_calc }} {{ warn_if }} as should_warn,
       {{ fail_calc }} {{ error_if }} as should_error
     from (
-      {{ main_sql }}
-      {{ "limit " ~ limit if limit != none }}
+      {{ get_limit_subquery_sql(main_sql, limit) }}
     ) dbt_internal_test
 {%- endmacro %}
 
