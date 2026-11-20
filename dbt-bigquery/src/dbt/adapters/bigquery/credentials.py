@@ -67,6 +67,9 @@ class BigQueryCredentials(Credentials):
     job_retries: Optional[int] = 1
     job_creation_timeout_seconds: Optional[int] = None
     job_execution_timeout_seconds: Optional[int] = None
+    # When True, each thread keeps its BigQuery client open between nodes instead of
+    # creating a new client for every node. Clients are closed when the invocation ends.
+    reuse_connections: Optional[bool] = None
     # When True, logs the BigQuery job link at INFO level instead of DEBUG
     job_link_info_level_log: Optional[bool] = False
 
@@ -163,6 +166,7 @@ class BigQueryCredentials(Credentials):
             "job_retries",
             "job_creation_timeout_seconds",
             "job_execution_timeout_seconds",
+            "reuse_connections",
             "job_link_info_level_log",
             "timeout_seconds",
             "client_id",
