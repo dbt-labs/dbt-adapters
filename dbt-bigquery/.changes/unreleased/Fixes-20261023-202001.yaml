@@ -1,0 +1,7 @@
+kind: Fixes
+body: Compare range partition field names case-insensitively so camelCase range partition
+  fields no longer force a drop and recreate of the table
+time: 2026-10-23T20:20:01.000000-05:00
+custom:
+    Author: raams95
+    Issue: "1407"
