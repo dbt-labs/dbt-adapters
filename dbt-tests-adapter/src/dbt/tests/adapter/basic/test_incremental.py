@@ -125,6 +125,25 @@ class BaseIncrementalBadStrategy:
         )
 
 
+class BaseIncrementalCustomStrategy(BaseIncremental):
+    """Same as `BaseIncremental`, but using a user-defined (custom) incremental strategy.
+
+    Adapters can override the `macros` fixture if the SQL of the custom strategy
+    needs to differ from the vendor-neutral default.
+    """
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {"custom_incremental_strategy.sql": files.custom_incremental_strategy_macro_sql}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental.sql": files.incremental_custom_strategy_sql,
+            "schema.yml": files.schema_base_yml,
+        }
+
+
 class Testincremental(BaseIncremental):
     pass
 

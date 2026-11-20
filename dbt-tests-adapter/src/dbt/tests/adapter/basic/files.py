@@ -190,6 +190,10 @@ config_materialized_incremental_invalid_strategy = """
   {{ config(materialized="incremental", incremental_strategy="bad_strategy") }}
 """
 
+config_materialized_incremental_custom_strategy = """
+  {{ config(materialized="incremental", incremental_strategy="my_custom_append") }}
+"""
+
 config_materialized_var = """
   {{ config(materialized=var("materialized_var", "table"))}}
 """
@@ -213,6 +217,16 @@ select
     {% endif %}
 """
 
+# a custom incremental strategy that appends the new rows, i.e. like the builtin `append` strategy
+custom_incremental_strategy_macro_sql = """
+{% macro get_incremental_my_custom_append_sql(arg_dict) %}
+  {%- set dest_cols_csv = arg_dict["dest_columns"] | map(attribute="quoted") | join(", ") -%}
+  insert into {{ arg_dict["target_relation"] }} ({{ dest_cols_csv }})
+  select {{ dest_cols_csv }}
+  from {{ arg_dict["temp_relation"] }}
+{% endmacro %}
+"""
+
 base_materialized_var_sql = config_materialized_var + model_base
 base_table_sql = config_materialized_table + model_base
 base_view_sql = config_materialized_view + model_base
@@ -221,6 +235,9 @@ ephemeral_with_cte_sql = config_materialized_ephemeral + model_ephemeral_with_ct
 ephemeral_view_sql = config_materialized_view + model_ephemeral
 ephemeral_table_sql = config_materialized_table + model_ephemeral
 incremental_sql = config_materialized_incremental + model_incremental
+incremental_custom_strategy_sql = (
+    config_materialized_incremental_custom_strategy + model_incremental
+)
 incremental_invalid_strategy_sql = (
     config_materialized_incremental_invalid_strategy + model_incremental
 )
