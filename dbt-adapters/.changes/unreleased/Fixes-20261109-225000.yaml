@@ -1,0 +1,6 @@
+kind: Fixes
+body: "Suppress false-positive validate_doc_columns warnings on cloned relations during dbt clone when documenting new columns in CI."
+time: 2026-11-09T22:50:00.000000+05:30
+custom:
+  Author: Ankitkj1999
+  Issue: "2182"
