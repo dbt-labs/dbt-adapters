@@ -44,3 +44,7 @@ class AthenaQueryFailedError(AthenaError):
 # Legacy version of AthenaQueryCancelledError
 class CancelledQueryException(AthenaQueryCancelledError):
     pass
+
+
+class SparkSessionTerminatedError(DbtRuntimeError):
+    pass
