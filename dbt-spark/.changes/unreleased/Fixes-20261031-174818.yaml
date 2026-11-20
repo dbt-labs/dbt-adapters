@@ -1,0 +1,6 @@
+kind: Fixes
+body: Honor SSL_CERT_FILE and REQUESTS_CA_BUNDLE when verifying the TLS certificate in the Spark connection.
+time: 2026-10-31T17:48:18.000000+00:00
+custom:
+    Author: baotran306
+    Issue: "2275"
