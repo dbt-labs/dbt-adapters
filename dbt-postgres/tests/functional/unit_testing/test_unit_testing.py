@@ -86,6 +86,30 @@ class TestUnitTests:
             run_dbt(["run", "--no-partial-parse", "--select", "my_model"])
 
 
+empty_expected_sql = """
+{{ get_expected_sql(
+    [],
+    {"id": "integer", "order": "text"},
+    {"id": '"id"', "order": '"order"'}
+) }}
+"""
+
+
+class TestEmptyExpectedSql:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"empty_expected.sql": empty_expected_sql}
+
+    def test_compiles_without_actual_cte_reference(self, project):
+        results = run_dbt(["compile", "--select", "empty_expected"])
+        assert len(results) == 1
+        compiled_code = results[0].node.compiled_code
+        assert compiled_code is not None
+        assert " ".join(compiled_code.split()) == (
+            'select cast(null as integer) as "id", cast(null as text) as "order" limit 0'
+        )
+
+
 class TestUnitTestIncrementalModel:
     @pytest.fixture(scope="class")
     def models(self):
