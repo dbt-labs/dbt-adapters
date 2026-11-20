@@ -69,6 +69,16 @@
 
 {% endmacro %}
 
+
+{% macro set_partitions(config, strategy, partition_by) %}
+  {#-- We override the partitions to force a static insert overwrite on microbatch, significantly more performant --#}
+  {% if strategy == "microbatch" and partition_by.copy_partitions is false %}
+    {{ return(bq_generate_static_partitions(config, partition_by.granularity)) }}
+  {% else %}
+    {{ return(config.get('partitions', none)) }}
+  {% endif %}
+{% endmacro %}
+
 {% materialization incremental, adapter='bigquery', supported_languages=['sql', 'python'] -%}
 
   {%- set unique_key = config.get('unique_key') -%}
@@ -84,7 +94,7 @@
 
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set partition_by = adapter.parse_partition_by(raw_partition_by) -%}
-  {%- set partitions = config.get('partitions', none) -%}
+  {%- set partitions = set_partitions(config, strategy, partition_by) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
 
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
