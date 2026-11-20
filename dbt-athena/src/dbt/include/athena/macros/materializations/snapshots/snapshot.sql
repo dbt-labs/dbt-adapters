@@ -41,7 +41,12 @@
     on dbt_internal_source.dbt_scd_id = dbt_internal_dest.dbt_scd_id
 
     when matched
-     and dbt_internal_dest.dbt_valid_to is null
+      {% if config.get("dbt_valid_to_current") %}
+        and ( dbt_internal_dest.dbt_valid_to = {{ config.get('dbt_valid_to_current') }} or
+              dbt_internal_dest.dbt_valid_to is null )
+      {% else %}
+        and dbt_internal_dest.dbt_valid_to is null
+      {% endif %}
      and dbt_internal_source.dbt_change_type in ('update', 'delete')
         then update
         set dbt_valid_to = dbt_internal_source.dbt_valid_to
