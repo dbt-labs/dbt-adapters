@@ -1,0 +1,6 @@
+kind: Fixes
+body: "Skip redundant expand_target_column_types call in the incremental materialization when on_schema_change is sync_all_columns."
+time: 2026-11-09T23:30:00.000000+05:30
+custom:
+  Author: Ankitkj1999
+  Issue: "2216"
