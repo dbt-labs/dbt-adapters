@@ -1,0 +1,6 @@
+kind: Fixes
+body: Rebuild Iceberg table models by repointing the existing Glue table in one UpdateTable call instead of two renames, so concurrent reads no longer fail with TABLE_NOT_FOUND during a rebuild
+time: 2026-10-19T14:00:00.000000+02:00
+custom:
+    Author: David-Banquet
+    Issue: "2215"
