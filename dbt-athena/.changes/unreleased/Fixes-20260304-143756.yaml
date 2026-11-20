@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix a debug log about the Athena workgroup
+time: 2026-03-04T14:37:56.730079+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1211"
