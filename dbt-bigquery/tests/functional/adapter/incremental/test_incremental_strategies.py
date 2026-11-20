@@ -192,3 +192,72 @@ class TestBigQueryMergeNullUniqueKeyTruthyNullsEquals:
 
         rows = [(row[0], row[1]) for row in table.rows]
         assert rows == [(1, "b_updated"), (None, "a_updated")]
+
+
+_insert_overwrite_copy_partitions_null_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy="insert_overwrite",
+        partition_by={
+            "field": "date_time",
+            "data_type": "datetime",
+            "granularity": "day",
+            "copy_partitions": true,
+        },
+    )
+}}
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        select 1 as id, cast('2020-01-01' as datetime) as date_time union all
+        select 2 as id, cast('2020-01-01' as datetime) as date_time union all
+        select 3 as id, cast(null as datetime) as date_time
+
+    {% else %}
+
+        select 10 as id, cast('2020-01-01' as datetime) as date_time union all
+        select 20 as id, cast('2020-01-02' as datetime) as date_time union all
+        select 30 as id, cast(null as datetime) as date_time
+
+    {% endif %}
+
+)
+
+select * from data
+""".lstrip()
+
+
+class TestBigQueryInsertOverwriteCopyPartitionsNullPartition:
+    """Regression: dynamic `insert_overwrite` with `copy_partitions: true` must
+    not crash when the partition column contains NULLs — null partitions are
+    skipped when collecting partitions to copy."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "insert_overwrite_copy_partitions_null.sql": _insert_overwrite_copy_partitions_null_sql
+        }
+
+    def test__copy_partitions_with_null_partition_column(self, project):
+        results = run_dbt(["run"])
+        assert len(results) == 1
+
+        results = run_dbt(["run"])
+        assert len(results) == 1
+
+        relation = project.adapter.Relation.create(
+            database=project.database,
+            schema=project.test_schema,
+            identifier="insert_overwrite_copy_partitions_null",
+        )
+        with project.adapter.connection_named("_test"):
+            _, table = project.adapter.execute(
+                f"select id, date_time from {relation} where date_time is not null order by id",
+                fetch=True,
+            )
+
+        rows = [(row[0], str(row[1])[:10]) for row in table.rows]
+        assert rows == [(10, "2020-01-01"), (20, "2020-01-02")]
