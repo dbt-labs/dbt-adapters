@@ -7,7 +7,25 @@
 
   -- transform array and map
   {%- if 'array' in data_type or 'map' in data_type -%}
-    {% set data_type = data_type.replace('(', '<').replace(')', '>') -%}
+    {#- Only an array or map's own parentheses become <>, so nested decimal(38,0) keeps its own. -#}
+    {%- set ns = namespace(out='', stack='') -%}
+    {%- for char in data_type -%}
+      {%- if char == '(' -%}
+        {%- if re.search('(?:^|[^a-z0-9_])(?:array|map)$', ns.out) -%}
+          {%- set ns.stack = ns.stack ~ '>' -%}
+          {%- set ns.out = ns.out ~ '<' -%}
+        {%- else -%}
+          {%- set ns.stack = ns.stack ~ ')' -%}
+          {%- set ns.out = ns.out ~ '(' -%}
+        {%- endif -%}
+      {%- elif char == ')' and ns.stack -%}
+        {%- set ns.out = ns.out ~ ns.stack[-1] -%}
+        {%- set ns.stack = ns.stack[:-1] -%}
+      {%- else -%}
+        {%- set ns.out = ns.out ~ char -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- set data_type = ns.out -%}
   {%- endif -%}
 
   -- transform int

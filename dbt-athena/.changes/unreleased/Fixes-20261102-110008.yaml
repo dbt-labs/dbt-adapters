@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep the parentheses of parameterized types such as decimal(38,0) nested inside an array or map in ddl_data_type, so on_schema_change append_new_columns no longer emits decimal<38,0>
+time: 2026-11-02T11:00:08.000000-05:00
+custom:
+    Author: sha2fiddy
+    Issue: "2246"
