@@ -90,7 +90,7 @@
       schemaname as schema,
       'table' as type
     from pg_tables
-    where schemaname ilike '{{ schema_relation.schema }}'
+    where lower(schemaname) = lower('{{ schema_relation.schema }}')
     union all
     select
       '{{ schema_relation.database }}' as database,
@@ -98,7 +98,7 @@
       schemaname as schema,
       'view' as type
     from pg_views
-    where schemaname ilike '{{ schema_relation.schema }}'
+    where lower(schemaname) = lower('{{ schema_relation.schema }}')
     union all
     select
       '{{ schema_relation.database }}' as database,
@@ -106,7 +106,7 @@
       schemaname as schema,
       'materialized_view' as type
     from pg_matviews
-    where schemaname ilike '{{ schema_relation.schema }}'
+    where lower(schemaname) = lower('{{ schema_relation.schema }}')
     union all
     select distinct
      '{{ schema_relation.database }}' as database,
@@ -115,7 +115,7 @@
      'function' as type
     from pg_proc
      join pg_namespace as ns on pronamespace = ns.oid
-    where ns.nspname ilike '{{ schema_relation.schema }}'
+    where lower(ns.nspname) = lower('{{ schema_relation.schema }}')
   {% endcall %}
   {{ return(load_result('list_relations_without_caching').table) }}
 {% endmacro %}
