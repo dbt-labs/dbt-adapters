@@ -4,6 +4,7 @@
 
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.DynamicTable) %}
+    {% set data_metrics = get_data_metrics_config() %}
 
     {{ run_hooks(pre_hooks) }}
 
@@ -23,6 +24,8 @@
     {% endif %}
 
     {{ run_hooks(post_hooks) }}
+
+    {% do apply_data_metrics(target_relation, data_metrics) %}
 
     {% do unset_query_tag(query_tag) %}
 
