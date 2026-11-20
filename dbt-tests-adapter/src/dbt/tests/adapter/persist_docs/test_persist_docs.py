@@ -323,3 +323,64 @@ class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
     pass
+
+
+class BasePersistDocsUnquotedColumnCaseInsensitive:
+    """Unquoted YAML column names should match database columns regardless of case."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "unquoted_case_model.sql": (
+                "select 1 as customer_id, 2 as order_total"
+            )
+        }
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {
+            "properties.yml": """
+version: 2
+models:
+  - name: unquoted_case_model
+    columns:
+      - name: CUSTOMER_ID
+        description: Uppercase YAML column comment
+        quote: false
+      - name: Order_Total
+        description: Mixed-case YAML column comment
+        quote: false
+"""
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "materialized": "table",
+                    "+persist_docs": {
+                        "relation": True,
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    def test_unquoted_column_comments_case_insensitive(self, project):
+        run_dbt()
+        run_dbt(["docs", "generate"])
+
+        with open("target/catalog.json") as fp:
+            catalog_data = json.load(fp)
+
+        columns = catalog_data["nodes"][
+            "model.test.unquoted_case_model"
+        ]["columns"]
+
+        assert columns["customer_id"]["comment"] == (
+            "Uppercase YAML column comment"
+        )
+        assert columns["order_total"]["comment"] == (
+            "Mixed-case YAML column comment"
+        )
