@@ -383,6 +383,49 @@ class TestAthenaCursor:
         cursor.execute("SELECT NOW()")
         assert cursor.data_scanned_in_bytes == 123
 
+    def test_total_data_scanned_in_bytes_sums_queries_on_connection(
+        self, athena_client, credentials, poll_delay, formatter
+    ):
+        connection = AthenaConnection(credentials, boto_session_factory=mock.Mock())
+        connection._client = athena_client
+        for _ in range(3):
+            cursor = connection.cursor()
+            cursor._poll_delay = poll_delay
+            cursor._formatter = formatter
+            cursor.execute("SELECT NOW()")
+        assert cursor.data_scanned_in_bytes == 123
+        assert cursor.total_data_scanned_in_bytes == 369
+        assert connection.data_scanned_in_bytes == 369
+
+    def test_total_data_scanned_in_bytes_includes_failed_and_batched_queries(
+        self, athena_client, credentials, poll_delay, formatter
+    ):
+        # e.g. a CTAS that hits TOO_MANY_OPEN_PARTITIONS followed by batched inserts
+        failed = {
+            "QueryExecution": {
+                **STATE_EVENT_ERROR_WITHOUT_MESSAGE["QueryExecution"],
+                "Statistics": {"DataScannedInBytes": 50},
+            }
+        }
+        athena_client.get_query_execution.side_effect = [
+            failed,
+            STATE_EVENT_SUCCEEDED,
+            STATE_EVENT_SUCCEEDED,
+        ]
+        connection = AthenaConnection(credentials, boto_session_factory=mock.Mock())
+        connection._client = athena_client
+        results = []
+        for _ in range(3):
+            cursor = connection.cursor()
+            cursor._poll_delay = poll_delay
+            cursor._formatter = formatter
+            try:
+                cursor.execute("INSERT INTO t SELECT 1")
+            except AthenaError:
+                pass
+            results.append(cursor.total_data_scanned_in_bytes)
+        assert results == [50, 173, 296]
+
     def test_query(self, cursor):
         assert cursor.query is None
         cursor.execute("SELECT NOW()")

@@ -19,13 +19,24 @@ class TestAthenaConnectionManager:
         cursor = mock.MagicMock()
         cursor.rowcount = 1
         cursor.state = state
-        cursor.data_scanned_in_bytes = 123
+        cursor.data_scanned_in_bytes = 10
+        cursor.total_data_scanned_in_bytes = 123
         cm = AthenaConnectionManager(mock.MagicMock(), get_context("spawn"))
         response = cm.get_response(cursor)
         assert isinstance(response, AthenaAdapterResponse)
         assert response.code == result
         assert response.rows_affected == 1
         assert response.data_scanned_in_bytes == 123
+
+    def test_get_response_falls_back_for_cursor_without_total(self):
+        # pyathena cursor (connection_manager: pyathena) has no node-wide total
+        cursor = mock.Mock(spec=["rowcount", "state", "data_scanned_in_bytes", "query"])
+        cursor.rowcount = 1
+        cursor.state = AthenaCursor.STATE_SUCCEEDED
+        cursor.query = "select 1"
+        cursor.data_scanned_in_bytes = 55
+        cm = AthenaConnectionManager(mock.MagicMock(), get_context("spawn"))
+        assert cm.get_response(cursor).data_scanned_in_bytes == 55
 
     def test_data_type_code_to_name(self):
         cm = AthenaConnectionManager(mock.MagicMock(), get_context("spawn"))
