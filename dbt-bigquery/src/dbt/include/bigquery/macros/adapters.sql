@@ -159,6 +159,13 @@
   {% do adapter.update_columns(relation, column_dict) %}
 {% endmacro %}
 
+{% macro bigquery__persist_row_access_policy(relation, model) %}
+  {%- set policy_config = config.get('row_access_policy', none) -%}
+  {%- if policy_config is not none -%}
+    {% do adapter.persist_row_access_policy(relation, policy_config) %}
+  {%- endif -%}
+{% endmacro %}
+
 {% macro bigquery__alter_relation_add_columns(relation, add_columns) %}
 
   {% set sql -%}
