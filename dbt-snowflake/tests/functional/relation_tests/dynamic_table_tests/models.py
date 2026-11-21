@@ -432,7 +432,6 @@ DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED = """
     snowflake_warehouse='DBT_TESTING',
     target_lag='2 minutes',
     scheduler='ENABLE',
-    refresh_mode='INCREMENTAL',
 ) }}
 select * from {{ ref('my_seed') }}
 """
