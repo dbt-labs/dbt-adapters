@@ -1391,6 +1391,34 @@ class TestAthenaAdapter:
         assert sorted(res) == ["bar", "foo", "quux"]
 
     @mock_aws
+    def test_list_schemas_with_other_glue_data_catalog(self, mock_aws_service):
+        mock_aws_service.create_data_catalog(
+            catalog_name=SHARED_DATA_CATALOG_NAME, catalog_id=SHARED_DATA_CATALOG_NAME
+        )
+        mock_aws_service.create_database("foo", catalog_id=SHARED_DATA_CATALOG_NAME)
+        self.adapter.acquire_connection("dummy")
+        # moto does not partition Glue databases by CatalogId, so check the request itself
+        paginate = botocore.paginate.Paginator.paginate
+        with patch.object(
+            botocore.paginate.Paginator, "paginate", autospec=True, side_effect=paginate
+        ) as mock_paginate:
+            res = self.adapter.list_schemas(SHARED_DATA_CATALOG_NAME)
+        assert res == ["foo"]
+        mock_paginate.assert_called_once_with(mock.ANY, CatalogId=SHARED_DATA_CATALOG_NAME)
+
+    @mock_aws
+    def test_list_schemas_with_s3_tables_catalog(self, mock_aws_service):
+        self.adapter.acquire_connection("dummy")
+        paginate = botocore.paginate.Paginator.paginate
+        with patch.object(
+            botocore.paginate.Paginator, "paginate", autospec=True, side_effect=paginate
+        ) as mock_paginate:
+            self.adapter.list_schemas("s3tablescatalog/my-bucket")
+        mock_paginate.assert_called_once_with(
+            mock.ANY, CatalogId=f"{DEFAULT_ACCOUNT_ID}:s3tablescatalog/my-bucket"
+        )
+
+    @mock_aws
     def test_check_schema_exists(self, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database(name="existing_schema")

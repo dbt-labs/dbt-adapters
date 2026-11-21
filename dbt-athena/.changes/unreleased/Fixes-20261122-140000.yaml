@@ -1,0 +1,6 @@
+kind: Fixes
+body: Make `list_schemas` list the schemas of the Glue catalog named by `database` (including S3 Tables catalogs) instead of always reading the default Glue catalog.
+time: 2026-11-22T14:00:00.000000+09:00
+custom:
+    Author: 1yangsh
+    Issue: "2345"
