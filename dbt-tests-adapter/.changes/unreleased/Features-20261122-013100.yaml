@@ -1,0 +1,8 @@
+kind: Features
+body: Add a same-target clone regression test for adapters without native table
+    cloning, verifying the clone is skipped, the table keeps its data, and no
+    intermediate or backup relations are left behind
+time: 2026-11-22T01:31:00.000000-05:00
+custom:
+    Author: akchhayasharma
+    Issue: "2335"

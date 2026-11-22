@@ -228,6 +228,84 @@ class BaseCloneSameSourceAndTarget(BaseClone):
         assert "skipping clone for relation" in output
 
 
+class BaseCloneSameSourceAndTargetNotPossible(BaseClone):
+    """Same-target clone when native table cloning is disabled.
+
+    Mirrors BaseCloneSameSourceAndTarget, but forces the view-based fallback
+    (can_clone_table() == False) so the identity guard is exercised on the
+    fallback path instead of the native-clone path.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "source_based_model.sql": fixtures.source_based_model_sql,
+            "source_schema.yml": fixtures.source_schema_yml,
+        }
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {
+            "macros.sql": fixtures.macros_sql,
+            "my_can_clone_tables.sql": fixtures.custom_can_clone_tables_false_macros_sql,
+            "infinite_macros.sql": fixtures.infinite_macros_sql,
+            "get_schema_name.sql": fixtures.get_schema_name_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {
+            "snapshot_model.sql": fixtures.source_based_model_snapshot_sql,
+        }
+
+    def test_clone_same_source_and_target_without_native_clone(self, project, unique_schema):
+        """Cloning a table to itself with native cloning disabled is a no-op.
+
+        The clone must be skipped instead of replacing the table with a view,
+        the source data must stay readable, and no intermediate/backup
+        relations may be left behind.
+        """
+        # Create a source table first
+        project.run_sql(f"DROP TABLE IF EXISTS {project.database}.{unique_schema}.source_table")
+        project.run_sql(
+            f"""
+            CREATE TABLE {project.database}.{unique_schema}.source_table AS
+            SELECT 1 as id, 'test_data' as name
+            UNION ALL
+            SELECT 2 as id, 'more_data' as name
+        """
+        )
+
+        # Run dbt to create the source-based model
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        # Save state
+        self.copy_state(project.project_root)
+
+        # Attempt to clone source_based_model to itself with --full-refresh
+        # This should not fail but should log a skip message
+        clone_args = ["clone", "--state", "state", "--full-refresh", "--log-level", "debug"]
+
+        _, output = run_dbt_and_capture(clone_args)
+
+        # Verify the skip message is logged
+        assert "skipping clone for relation" in output
+
+        # The model is still a table, and no intermediate/backup relations
+        # were left behind by a view-materialization swap
+        schema_relations = project.adapter.list_relations(
+            database=project.database, schema=unique_schema
+        )
+        relations_by_name = {r.identifier: r for r in schema_relations}
+        assert set(relations_by_name) == {"source_table", "source_based_model"}
+        assert relations_by_name["source_based_model"].type == "table"
+
+        # The source data is still readable: its data tests pass
+        results = run_dbt(["test"])
+        assert len(results) == 3
+
+
 class TestPostgresCloneNotPossible(BaseCloneNotPossible):
     @pytest.fixture(autouse=True)
     def clean_up(self, project):

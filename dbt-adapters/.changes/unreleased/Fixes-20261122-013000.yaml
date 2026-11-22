@@ -1,0 +1,8 @@
+kind: Fixes
+body: Apply the same-target clone identity guard before choosing between native
+    table cloning and the view fallback, so cloning a relation onto itself is
+    skipped on both paths instead of only the native-clone path
+time: 2026-11-22T01:30:00.000000-05:00
+custom:
+    Author: akchhayasharma
+    Issue: "2335"
