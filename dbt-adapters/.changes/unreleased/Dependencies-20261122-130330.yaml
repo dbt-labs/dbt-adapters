@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Allow protobuf 7 (protobuf>=6.0,<8.0)
+time: 2026-11-22T13:03:30.000000-06:00
+custom:
+  Author: zaneselvans
+  PR: "2354"
