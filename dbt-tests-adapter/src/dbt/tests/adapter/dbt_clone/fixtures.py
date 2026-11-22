@@ -166,3 +166,40 @@ models:
       grants:
         select: ["{{ env_var('DBT_TEST_USER_1') }}"]
 """
+
+# View with an enforced contract, for testing that `dbt clone` still works
+# when the contract changed after the deferred state was saved
+contracted_view_model_sql = """
+{{ config(materialized='view', contract={'enforced': True}) }}
+select * from {{ ref('seed') }}
+"""
+
+contracted_view_schema_yml = """
+version: 2
+models:
+  - name: view_model
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id
+        data_type: integer
+      - name: name
+        data_type: text
+"""
+
+contracted_view_changed_schema_yml = """
+version: 2
+models:
+  - name: view_model
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id
+        data_type: integer
+      - name: name
+        data_type: text
+      - name: nickname
+        data_type: text
+"""

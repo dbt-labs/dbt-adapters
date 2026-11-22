@@ -25,7 +25,17 @@
 {%- endmacro -%}
 
 {% macro default__get_assert_columns_equivalent(sql) -%}
-  {{ return(assert_columns_equivalent(sql)) }}
+  {#
+    Skip the assertion when cloning: dbt clone on a view reuses the view
+    materialization, which asserts the enforced contract against
+    `select * from <deferred relation>`. When the contract changed since
+    the deferred state was saved, the deferred columns no longer match the
+    new contract and the clone fails, while tables succeed because zero-copy
+    clone never asserts. The contract is still enforced on the next build.
+  #}
+  {%- if flags.WHICH != 'clone' -%}
+    {{ return(assert_columns_equivalent(sql)) }}
+  {%- endif -%}
 {%- endmacro %}
 
 {#

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Skip the enforced model contract assertion when running `dbt clone` on a view, so a contract that changed since the deferred state was saved no longer fails the clone. The contract is still enforced on the next `dbt build`.
+time: 2026-11-22T06:57:00.000000-05:00
+custom:
+  Author: akchhayasharma
+  Issue: "2348"
