@@ -86,10 +86,38 @@ _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
 ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
 
+# Appended to a failed Snowflake CREATE OR ALTER: it declares the whole desired end state in place,
+# and Snowflake rejects the changes it cannot apply (column reorders, type narrowing, ...).
+# CREATE OR REPLACE always can.
+CREATE_OR_ALTER_FAILURE_HINT = (
+    "Hint: this statement was a CREATE OR ALTER, which cannot apply every change in place. "
+    "If the error above is a change CREATE OR ALTER does not support, re-run with `--full-refresh` "
+    "to rebuild the object with CREATE OR REPLACE."
+)
+# Snowflake rejects an in-place change to `transient` (error 001521, "Property 'TRANSIENT_DATA'
+# cannot be changed in CREATE OR ALTER"). Offer both recoveries: set `transient` to match the table,
+# or rebuild with the default setting.
+CREATE_OR_ALTER_TRANSIENT_HINT = (
+    "Hint: CREATE OR ALTER cannot change whether a dynamic table is transient, and this model's "
+    "`transient` setting does not match the existing table. If `transient` is not set in the model, "
+    "dbt uses the default (`snowflake_default_transient_dynamic_tables`), so set `transient` "
+    "explicitly to match the table. Or re-run with `--full-refresh` to rebuild the table with the "
+    "default setting; that replaces the table and resets its refresh state."
+)
+_CREATE_OR_ALTER = re.compile(r"create\s+or\s+alter\b", re.IGNORECASE)
+
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
 }
+
+# values of `revocation_check_mode`: fail-open, fail-closed, no checks
+REVOCATION_CHECK_MODES = ("ADVISORY", "ENABLED", "DISABLED")
+
+
+def _connector_major_version() -> int:
+    return int(snowflake.connector.__version__.split(".")[0])
+
 
 # The statements dbt issues, with snowflake_fail_on_unexpected_existing_relation enabled, for an
 # incremental model or snapshot whose table is not in the relation cache: a CTAS without OR
@@ -118,6 +146,21 @@ def _is_unexpected_existing_relation_error(msg: str, sql: Optional[str]) -> bool
         return True
     statement = _LEADING_SQL_COMMENTS.sub("", sql, count=1)
     return _CREATE_TABLE_AS_WITHOUT_REPLACE.match(statement) is not None
+
+
+def _create_or_alter_hint(msg: str, sql: Optional[str]) -> Optional[str]:
+    """The recovery hint for an error raised by a CREATE OR ALTER statement, or None.
+
+    Only errors whose own text names CREATE OR ALTER get a hint, so a failure with nothing to do
+    with the statement form (permissions, a suspended warehouse, a dropped connection) is unchanged.
+    """
+    statement = _LEADING_SQL_COMMENTS.sub("", sql or "", count=1)
+    message = msg.lower()
+    if not _CREATE_OR_ALTER.match(statement) or "create or alter" not in message:
+        return None
+    if "transient" in message:
+        return CREATE_OR_ALTER_TRANSIENT_HINT
+    return CREATE_OR_ALTER_FAILURE_HINT
 
 
 @cache
@@ -155,8 +198,9 @@ class SnowflakeCredentials(Credentials):
     retry_on_database_errors: bool = False
     retry_all: bool = False
     insecure_mode: Optional[bool] = False
-    # connector default before 4.8; passed explicitly to keep behavior stable across versions
-    ocsp_fail_open: bool = True
+    # ADVISORY (fail-open), ENABLED (fail-closed) or DISABLED. Unset keeps each connector's
+    # default: OCSP fail-open on 4.x, no CRL checks on 5.x; see `revocation_check_args()`
+    revocation_check_mode: Optional[str] = None
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
@@ -212,6 +256,20 @@ class SnowflakeCredentials(Credentials):
         if self.client_session_keep_alive is False and self.reuse_connections is None:
             self.reuse_connections = True
 
+        if self.revocation_check_mode is not None:
+            mode = str(self.revocation_check_mode).upper()
+            if mode not in REVOCATION_CHECK_MODES:
+                raise DbtConfigError(
+                    f"Invalid revocation_check_mode '{self.revocation_check_mode}'. "
+                    f"Expected one of: {', '.join(REVOCATION_CHECK_MODES)}"
+                )
+            if self.insecure_mode and mode == "ENABLED":
+                raise DbtConfigError(
+                    "insecure_mode turns certificate revocation checks off, so it cannot be "
+                    "combined with revocation_check_mode: ENABLED"
+                )
+            self.revocation_check_mode = mode
+
     @property
     def type(self):
         return "snowflake"
@@ -244,13 +302,37 @@ class SnowflakeCredentials(Credentials):
             "retry_on_database_errors",
             "retry_all",
             "insecure_mode",
-            "ocsp_fail_open",
+            "revocation_check_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
             "workload_identity_entra_resource",
             "platform_detection_timeout_seconds",
         )
+
+    def revocation_check_args(self) -> Dict[str, Any]:
+        """Connector arguments for certificate revocation checks.
+
+        Connector 5.x only checks revocation against CRLs, through `crl_check_mode`, and
+        ignores the OCSP options. CRL checks are opt-in: when the mode is unset, nothing is
+        passed and the connector's default (no checks) applies, because a blocked CRL
+        download can fail the connection even in ADVISORY mode.
+
+        Connector 4.x checks with OCSP: fail-open for ADVISORY or unset, fail-closed for
+        ENABLED, and no checks for DISABLED or `insecure_mode`.
+        """
+        mode = "DISABLED" if self.insecure_mode else self.revocation_check_mode
+        if _connector_major_version() >= 5:
+            return {"crl_check_mode": mode} if mode else {}
+        return {
+            # the connector's `insecure_mode` is a deprecated alias of `disable_ocsp_checks`
+            "disable_ocsp_checks": mode == "DISABLED",
+            # always set: from 4.8 the connector skips OCSP checks unless it is set
+            "ocsp_fail_open": mode != "ENABLED",
+            # cert lock can cause deadlock without timeout, see
+            # https://github.com/snowflakedb/snowflake-connector-python/issues/2213
+            "ocsp_root_certs_dict_lock_timeout": 10,
+        }
 
     def auth_args(self):
         # Pull all of the optional authentication args for the connector,
@@ -450,6 +532,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                 )
             elif _is_unexpected_existing_relation_error(msg, sql):
                 raise DbtDatabaseError("{}\n\n{}".format(msg, UNEXPECTED_EXISTING_RELATION_HINT))
+            elif (create_or_alter_hint := _create_or_alter_hint(msg, sql)) is not None:
+                raise DbtDatabaseError("{}\n\n{}".format(msg, create_or_alter_hint))
             else:
                 raise DbtDatabaseError(msg)
         except Exception as e:
@@ -500,11 +584,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     autocommit=True,
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
-                    insecure_mode=creds.insecure_mode,
-                    ocsp_fail_open=creds.ocsp_fail_open,
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
-                    ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
+                    **creds.revocation_check_args(),
                     **creds.auth_args(),
                 )
 

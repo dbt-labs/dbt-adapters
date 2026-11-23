@@ -69,6 +69,12 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.patcher = mock.patch("dbt.adapters.snowflake.connections.snowflake.connector.connect")
         self.snowflake = self.patcher.start()
         self.snowflake.connect.cursor.return_value = mock.MagicMock(sfqid="42")
+        # the revocation check arguments depend on the connector's major version; the expected
+        # `connect()` calls below are for 4.x unless a test says otherwise
+        self.connector_version_patcher = mock.patch(
+            "dbt.adapters.snowflake.connections._connector_major_version", return_value=4
+        )
+        self.connector_major_version = self.connector_version_patcher.start()
 
         # Create the Manifest.state_check patcher
         @mock.patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
@@ -105,6 +111,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.adapter.cleanup_connections()
         self.qh_patch.stop()
         self.patcher.stop()
+        self.connector_version_patcher.stop()
         self.load_state_check.stop()
 
     def test_fail_on_unexpected_existing_relation_flag_defaults_on(self):
@@ -308,7 +315,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -343,7 +350,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -356,8 +363,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.assertIsNone(conn.credentials.reuse_connections)
         self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
 
-    def test_ocsp_fail_open_false(self):
-        self.config.credentials = self.config.credentials.replace(ocsp_fail_open=False)
+    def test_revocation_check_mode_enabled_uses_fail_closed_ocsp_on_connector_4(self):
+        self.config.credentials = self.config.credentials.replace(revocation_check_mode="ENABLED")
         self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
         conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
 
@@ -376,11 +383,56 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=False,
+                ),
+            ]
+        )
+
+    def test_no_revocation_args_by_default_on_connector_5(self):
+        self.connector_major_version.return_value = 5
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        conn.handle
+        # CRL checks are opt-in on 5.x, and it has no OCSP, so no revocation options are sent
+        kwargs = self.snowflake.call_args.kwargs
+        for key in (
+            "crl_check_mode",
+            "disable_ocsp_checks",
+            "insecure_mode",
+            "ocsp_fail_open",
+            "ocsp_root_certs_dict_lock_timeout",
+        ):
+            self.assertNotIn(key, kwargs)
+
+    def test_revocation_checks_use_crl_on_connector_5(self):
+        self.connector_major_version.return_value = 5
+        self.config.credentials = self.config.credentials.replace(revocation_check_mode="ADVISORY")
+        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        self.snowflake.assert_not_called()
+        conn.handle
+        # no OCSP options: connector 5.x has no OCSP and only checks CRLs
+        self.snowflake.assert_has_calls(
+            [
+                mock.call(
+                    account="test-account",
+                    autocommit=True,
+                    client_session_keep_alive=False,
+                    database="test_database",
+                    role=None,
+                    schema="public",
+                    user="test_user",
+                    warehouse="test_warehouse",
+                    private_key=None,
+                    application="dbt",
+                    platform_detection_timeout_seconds=0.0,
+                    session_parameters={},
+                    crl_check_mode="ADVISORY",
                 ),
             ]
         )
@@ -405,7 +457,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -442,7 +494,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -478,7 +530,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -510,7 +562,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -546,7 +598,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -582,7 +634,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key="test_key",
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -618,7 +670,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key="test_key",
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -652,7 +704,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -684,7 +736,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -715,7 +767,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -755,7 +807,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key="test_key",
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
@@ -793,7 +845,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     warehouse="test_warehouse",
                     private_key="test_key",
                     application="dbt",
-                    insecure_mode=False,
+                    disable_ocsp_checks=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     ocsp_root_certs_dict_lock_timeout=10,
