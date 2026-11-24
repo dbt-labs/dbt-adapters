@@ -735,13 +735,14 @@ class SnowflakeConnectionManager(SQLConnectionManager):
     ) -> "agate.Table":
         from dbt_common.clients.agate_helper import table_from_data_flat
 
-        if preserve_native_binary_results:
-            return super().get_result_from_cursor(cursor, limit)
-
         native = (
             cursor.native_cursor if isinstance(cursor, SnowflakeRecordReplayCursor) else cursor
         )
-        if getattr(native, "_query_result_format", None) != "json" or cursor.description is None:
+        if (
+            getattr(native, "_query_result_format", None) != "json"
+            or cursor.description is None
+            or preserve_native_binary_results
+        ):
             return super().get_result_from_cursor(cursor, limit)
 
         # 4.x decoded JSON BINARY as bytes, but Arrow BINARY as bytearray.

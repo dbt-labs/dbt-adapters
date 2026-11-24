@@ -552,17 +552,18 @@ def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_an
     )
 
 
-@pytest.mark.parametrize("preserve", [False, True])
 @pytest.mark.parametrize("limit", [None, 1])
 @pytest.mark.parametrize(
-    "result_format, binary, expected",
+    "result_format, binary, default_text, native_text",
     [
-        ("json", b"\x00\xff", "b'\\x00\\xff'"),
-        ("json", bytearray(b"\x00\xff"), "b'\\x00\\xff'"),
-        ("arrow", bytearray(b"\x00\xff"), "bytearray(b'\\x00\\xff')"),
+        ("json", b"\x00\xff", "b'\\x00\\xff'", "b'\\x00\\xff'"),
+        ("json", bytearray(b"\x00\xff"), "b'\\x00\\xff'", "bytearray(b'\\x00\\xff')"),
+        ("arrow", bytearray(b"\x00\xff"), "bytearray(b'\\x00\\xff')", "bytearray(b'\\x00\\xff')"),
+        (None, bytearray(b"\x00\xff"), "bytearray(b'\\x00\\xff')", "bytearray(b'\\x00\\xff')"),
     ],
 )
-def test_binary_macro_result(result_format, binary, expected, limit, preserve):
+@pytest.mark.parametrize("preserve", [False, True], ids=["default", "preserve_native"])
+def test_binary_macro_result(result_format, binary, default_text, native_text, limit, preserve):
     cursor = Mock(description=[("PAYLOAD",)], _query_result_format=result_format)
     rows = [(binary,), (None,)]
     cursor.fetchall.return_value = rows
@@ -575,7 +576,6 @@ def test_binary_macro_result(result_format, binary, expected, limit, preserve):
         patch.object(manager, "get_response"),
     ):
         _, table = manager.execute("select payload", fetch=True, limit=limit)
-    if preserve:
-        expected = str(binary)
 
+    expected = native_text if preserve else default_text
     assert list(table.columns["PAYLOAD"]) == ([expected] if limit else [expected, None])

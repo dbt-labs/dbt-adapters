@@ -80,7 +80,7 @@ SNOWFLAKE_PRESERVE_NATIVE_BINARY_RESULTS = BehaviorFlag(
     name="snowflake_preserve_native_binary_results",
     default=False,
     description=(
-        "Use the connector's native binary representation for fetched results. "
+        "Use the connector's native binary representation for JSON query results. "
         "By default, dbt converts bytearray to bytes for JSON results to preserve "
         "the text that macros received with connector 4.x."
     ),
