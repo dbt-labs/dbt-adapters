@@ -195,7 +195,12 @@ class SparkAdapter(SQLAdapter):
                 DESCRIBE_TABLE_EXTENDED_MACRO_NAME, kwargs={"table_name": table_name}
             )
         except DbtRuntimeError as e:
-            logger.debug(f"Error while retrieving information about {table_name}: {e.msg}")
+            errmsg = getattr(e, "msg", "")
+            if not any(msg in errmsg for msg in TABLE_OR_VIEW_NOT_FOUND_MESSAGES):
+                # Empty metadata would misclassify an existing table (format, type), so
+                # snapshots fail their format check and table materializations drop it.
+                raise
+            logger.debug(f"Error while retrieving information about {table_name}: {errmsg}")
             table_results = AttrDict()
 
         information = ""

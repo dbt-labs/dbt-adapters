@@ -842,6 +842,51 @@ def test_table_or_view_not_found_fallback_error_propagates(target_http):
             adapter.list_relations_without_caching(schema_relation)
 
 
+def _show_tables_then_describe_fails(describe_error):
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND]")
+        if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+            return [("analytics", "my_model", False)]
+        raise DbtRuntimeError(describe_error)
+
+    return execute_macro_side_effect
+
+
+def test_describe_failure_after_show_tables_propagates(target_http):
+    """SHOW TABLES succeeding while DESCRIBE fails with a metastore or permission error must
+    not cache empty metadata, which would misclassify an existing table."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=_show_tables_then_describe_fails("Permission denied on analytics.my_model"),
+    ):
+        with pytest.raises(DbtRuntimeError):
+            adapter.list_relations_without_caching(schema_relation)
+
+
+def test_describe_of_dropped_table_after_show_tables_is_tolerated(target_http):
+    """A table dropped between SHOW TABLES and DESCRIBE does not fail the listing."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=_show_tables_then_describe_fails("[TABLE_OR_VIEW_NOT_FOUND] dropped"),
+    ):
+        result = adapter.list_relations_without_caching(schema_relation)
+
+    assert [(r.schema, r.identifier) for r in result] == [("analytics", "my_model")]
+
+
 ICEBERG_V2_ERROR = "SHOW TABLE EXTENDED is not supported for v2 tables"
 
 
