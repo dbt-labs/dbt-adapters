@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Union
+from typing import Any, Iterable, List, Optional, Union
 
 from dbt_common.exceptions import DbtConfigError
 
@@ -145,3 +145,11 @@ def iceberg_version(model: RelationConfig) -> Optional[int]:
 
 def target_file_size(model: RelationConfig) -> Optional[str]:
     return model.config.get("target_file_size") if model.config else None
+
+
+def data_metric_schedule(model: RelationConfig) -> Optional[str]:
+    return model.config.get("data_metric_schedule") if model.config else None
+
+
+def data_metric_functions(model: RelationConfig) -> Optional[List[Any]]:
+    return model.config.get("data_metric_functions") if model.config else None

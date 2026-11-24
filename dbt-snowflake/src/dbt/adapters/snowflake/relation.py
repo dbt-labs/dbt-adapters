@@ -18,6 +18,8 @@ from dbt_common.events.functions import fire_event, warn_or_error
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
+    SnowflakeDataMetricsConfig,
+    SnowflakeDataMetricsConfigChangeset,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
@@ -260,6 +262,33 @@ class SnowflakeRelation(BaseRelation):
                     context=desired_init_warehouse,
                 )
             )
+
+        return changeset if changeset.has_changes else None
+
+    @classmethod
+    def data_metrics_config_changeset(
+        cls, relation_results: RelationResults, new: SnowflakeDataMetricsConfig
+    ) -> Optional[SnowflakeDataMetricsConfigChangeset]:
+        existing = SnowflakeDataMetricsConfig.from_relation_results(relation_results)
+
+        changeset = SnowflakeDataMetricsConfigChangeset()
+
+        if new.schedule is not None and new.schedule_normalized != existing.schedule_normalized:
+            changeset.schedule = new.schedule
+
+        if new.functions is not None:
+            if existing.functions is None:
+                raise DbtRuntimeError(
+                    "Cannot reconcile data_metric_functions: current associations were not read"
+                )
+            existing_keys = {association.key for association in existing.functions}
+            new_keys = {association.key for association in new.functions}
+            for association in existing.functions:
+                if association.key not in new_keys:
+                    changeset.drops.append(association)
+            for association in new.functions:
+                if association.key not in existing_keys:
+                    changeset.adds.append(association)
 
         return changeset if changeset.has_changes else None
 
