@@ -333,7 +333,10 @@ class TestSessionStateErrorHandling:
                 first_session_id
             )
             # Verify we got a result (meaning retry worked)
-            assert result == {"ResultS3Uri": "test_results_s3_uri"}
+            assert result == {
+                "ResultS3Uri": "test_results_s3_uri",
+                "SparkSessionId": second_session_id,
+            }
             # Verify we made two attempts
             assert start_calc_calls[0] == 2
 
@@ -413,6 +416,42 @@ class TestSessionStateErrorHandling:
             result = helper.submit("print('hello')")
 
             # Verify we got a result
-            assert result == {"ResultS3Uri": "test_results_s3_uri"}
+            assert result == {
+                "ResultS3Uri": "test_results_s3_uri",
+                "SparkSessionId": str(session_id),
+            }
             # Verify we made two attempts (once failed with BUSY, then succeeded)
             assert call_count[0] == 2
+
+
+class TestCalculationsGhostSubmission:
+    @pytest.fixture
+    def helper(self):
+        credentials = Mock()
+        credentials.region_name = "us-east-1"
+        credentials.spark_work_group = "test-workgroup"
+        model = {
+            "alias": "test_model",
+            "relation_name": "test_relation",
+            "schema": "test_schema",
+            "config": {"timeout": 10, "polling_interval": 1},
+        }
+        with patch(
+            "dbt.adapters.athena.python_submissions.AthenaSparkSessionManager"
+        ) as manager_cls:
+            helper = AthenaPythonJobHelper(model, credentials)
+            helper.__dict__["athena_client"] = Mock()
+            yield helper, manager_cls.return_value
+
+    @pytest.mark.parametrize("engine_version", [None, "3.4"])
+    @pytest.mark.parametrize("code", ["", "   \n\t"])
+    def test_ghost_does_not_touch_athena(self, helper, engine_version, code):
+        job_helper, manager = helper
+        if engine_version is not None:
+            job_helper.config.config["spark_engine_version"] = engine_version
+        result = job_helper.submit(code)
+
+        assert "SparkSessionId" not in result
+        manager.get_session_id.assert_not_called()
+        assert job_helper.athena_client.method_calls == []
+        assert "session_id" not in job_helper.__dict__
