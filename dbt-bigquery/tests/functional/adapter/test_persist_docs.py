@@ -1,6 +1,8 @@
 import json
 import pytest
+from unittest import mock
 
+from dbt.adapters.bigquery.impl import BigQueryAdapter
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
@@ -124,6 +126,33 @@ class TestPersistDocsSimple(BasePersistDocsBase):
                     assert bq_schema[1].description.startswith(
                         "Some stuff here and then a call to"
                     )
+
+
+class TestPersistDocsSeedDescriptionSetByAlterOnly(BasePersistDocsBase):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            # turn off the persist_docs update so any remaining call comes from the seed load
+            "flags": {"bigquery_noop_alter_relation_comment": True},
+            "seeds": {
+                "test": {
+                    "+persist_docs": {
+                        "relation": True,
+                    },
+                }
+            },
+        }
+
+    def test_seed_description_set_without_update_call(self, project):
+        with mock.patch.object(BigQueryAdapter, "update_table_description") as mock_update:
+            run_dbt(["seed"])
+            assert mock_update.call_count == 0
+
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            bq_table = client.get_table(f"{project.database}.{project.test_schema}.seed")
+
+        assert bq_table.description.startswith("Seed model description")
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsBase):
