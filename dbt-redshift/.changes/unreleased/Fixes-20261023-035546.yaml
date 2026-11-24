@@ -1,0 +1,10 @@
+kind: Fixes
+body: Only use the native `ALTER COLUMN TYPE` when growing a `varchar`/`varbyte` column if
+    dbt is actually skipping BEGIN/COMMIT, i.e. when `autocommit` is enabled as well as
+    `redshift_skip_autocommit_transaction_statements`. With `autocommit` off the statement
+    ran inside a transaction block and failed with "ALTER TABLE ALTER COLUMN cannot run
+    inside a transaction block".
+time: 2026-10-23T03:55:46.858060-04:00
+custom:
+    Author: stephenyang0215
+    Issue: "2240"
