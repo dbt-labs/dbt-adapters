@@ -187,12 +187,14 @@ class BaseCloneNotPossible(BaseClone):
 
 
 class BaseCloneSameSourceAndTarget(BaseClone):
+    @pytest.fixture(scope="class")
     def models(self):
         return {
             "source_based_model.sql": fixtures.source_based_model_sql,
             "source_schema.yml": fixtures.source_schema_yml,
         }
 
+    @pytest.fixture(scope="class")
     def snapshots(self):
         return {
             "snapshot_model.sql": fixtures.source_based_model_snapshot_sql,
@@ -214,6 +216,7 @@ class BaseCloneSameSourceAndTarget(BaseClone):
         # Run dbt to create the source-based model
         run_dbt(["seed"])
         run_dbt(["run"])
+        run_dbt(["snapshot"])
 
         # Save state
         self.copy_state(project.project_root)
@@ -222,7 +225,9 @@ class BaseCloneSameSourceAndTarget(BaseClone):
         # This should not fail but should log a skip message
         clone_args = ["clone", "--state", "state", "--full-refresh", "--log-level", "debug"]
 
-        _, output = run_dbt_and_capture(clone_args)
+        results, output = run_dbt_and_capture(clone_args)
+        # seed, source_based_model and source_based_model_snapshot
+        assert len(results) == 3
 
         # Verify the skip message is logged
         assert "skipping clone for relation" in output
