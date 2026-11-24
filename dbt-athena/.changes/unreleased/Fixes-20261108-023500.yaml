@@ -1,0 +1,6 @@
+kind: Fixes
+body: Dump environment and AWS context (caller identity, workgroups, catalogs) before running the Athena integration test suite so CI runs are self-diagnosing
+time: 2026-11-08T02:35:00.000000+08:00
+custom:
+    Author: mini555-gif
+    Issue: "0"
