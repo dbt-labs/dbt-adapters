@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Declare Python 3.15 compatibility for the dbt-adapters wheel and validate package builds and unit tests on Python 3.15.
+time: 2026-11-11T15:47:21.252509Z
+custom:
+    Author: ebrake
+    Issue: "2316"
