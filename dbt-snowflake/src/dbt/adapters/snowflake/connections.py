@@ -55,7 +55,7 @@ from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.events.functions import warn_or_error
 from dbt.adapters.events.types import AdapterEventWarning, AdapterEventError
 from dbt_common.ui import line_wrap_message, warning_tag
-from dbt.adapters.snowflake.record import SnowflakeRecordReplayHandle
+from dbt.adapters.snowflake.record import SnowflakeRecordReplayCursor, SnowflakeRecordReplayHandle
 
 from dbt.adapters.snowflake.auth import private_key_from_file, private_key_from_string
 from dbt.adapters.snowflake.query_headers import SnowflakeMacroQueryStringSetter
@@ -501,6 +501,7 @@ class SnowflakeCredentials(Credentials):
 
 class SnowflakeConnectionManager(SQLConnectionManager):
     TYPE = "snowflake"
+    preserve_native_binary_results = False
 
     @contextmanager
     def exception_handler(self, sql):
@@ -704,7 +705,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         return [part[0] for part in split_query]
 
     @staticmethod
-    def _fix_rows(rows: Iterable[Iterable]) -> Iterable[Iterable]:
+    def _fix_rows(rows: Iterable[Iterable], *, json_result: bool = False) -> Iterable[Iterable]:
         # See note in process_results().
         for row in rows:
             fixed_row = []
@@ -715,16 +716,40 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     offset_seconds = offset.total_seconds()
                     new_timezone = pytz.FixedOffset(int(offset_seconds // 60))
                     col = col.astimezone(tz=new_timezone)
+                elif json_result and isinstance(col, bytearray):
+                    col = bytes(col)
                 fixed_row.append(col)
 
             yield fixed_row
 
     @classmethod
-    def process_results(cls, column_names, rows):
+    def process_results(cls, column_names, rows, *, json_result=False):
         # Override for Snowflake. The datetime objects returned by
         # snowflake-connector-python are not pickleable, so we need
         # to replace them with sane timezones.
-        return super().process_results(column_names, cls._fix_rows(rows))
+        return super().process_results(column_names, cls._fix_rows(rows, json_result=json_result))
+
+    @classmethod
+    def get_result_from_cursor(
+        cls, cursor: Any, limit: Optional[int], *, preserve_native_binary_results: bool = False
+    ) -> "agate.Table":
+        from dbt_common.clients.agate_helper import table_from_data_flat
+
+        if preserve_native_binary_results:
+            return super().get_result_from_cursor(cursor, limit)
+
+        native = (
+            cursor.native_cursor if isinstance(cursor, SnowflakeRecordReplayCursor) else cursor
+        )
+        if getattr(native, "_query_result_format", None) != "json" or cursor.description is None:
+            return super().get_result_from_cursor(cursor, limit)
+
+        # 4.x decoded JSON BINARY as bytes, but Arrow BINARY as bytearray.
+        # Preserve that distinction before agate casts binary values to text.
+        rows = cursor.fetchmany(limit) if limit else cursor.fetchall()
+        column_names = [column[0] for column in cursor.description]
+        data = cls.process_results(column_names, rows, json_result=True)
+        return table_from_data_flat(data, column_names)
 
     def execute(
         self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
@@ -736,7 +761,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         _, cursor = self.add_query(sql, auto_begin)
         response = self.get_response(cursor)
         if fetch:
-            table = self.get_result_from_cursor(cursor, limit)
+            table = self.get_result_from_cursor(
+                cursor, limit, preserve_native_binary_results=self.preserve_native_binary_results
+            )
         else:
             table = empty_table()
         return response, table

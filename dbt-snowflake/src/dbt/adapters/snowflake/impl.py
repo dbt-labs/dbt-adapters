@@ -76,6 +76,16 @@ def _sql_literal(value: Optional[str]) -> str:
     return (value or "").replace("'", "''")
 
 
+SNOWFLAKE_PRESERVE_NATIVE_BINARY_RESULTS = BehaviorFlag(
+    name="snowflake_preserve_native_binary_results",
+    default=False,
+    description=(
+        "Use the connector's native binary representation for fetched results. "
+        "By default, dbt converts bytearray to bytes for JSON results to preserve "
+        "the text that macros received with connector 4.x."
+    ),
+)
+
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
     default=False,
@@ -174,6 +184,7 @@ class SnowflakeAdapter(SQLAdapter):
     Relation = SnowflakeRelation
     Column = SnowflakeColumn
     ConnectionManager = SnowflakeConnectionManager
+    connections: SnowflakeConnectionManager
 
     AdapterSpecificConfigs = SnowflakeConfig
 
@@ -222,6 +233,7 @@ class SnowflakeAdapter(SQLAdapter):
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
         return [
+            SNOWFLAKE_PRESERVE_NATIVE_BINARY_RESULTS,
             SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
             SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
             SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION,
@@ -230,6 +242,9 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
+        self.connections.preserve_native_binary_results = (
+            self.behavior.snowflake_preserve_native_binary_results.no_warn
+        )
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
         self._case_insensitive_databases: Dict[str, bool] = {}
