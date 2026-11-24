@@ -1,0 +1,6 @@
+kind: Fixes
+body: Prevent `snowflake__alter_column_comment` from altering or erasing comments on undocumented columns due to a tautological loop condition, and skip emitting empty ALTER statements when no documented columns match the relation
+time: 2026-11-10T20:13:00.000000+05:30
+custom:
+    Author: ankitkj1999
+    Issue: "2312"
