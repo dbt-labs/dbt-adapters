@@ -683,6 +683,8 @@ class TestAthenaAdapter:
             pytest.param("col", True, None, '"col"'),
             pytest.param("col", False, "`", "col"),
             pytest.param("col", True, "`", "`col`"),
+            pytest.param('a"b', True, None, '"a""b"'),
+            pytest.param("a`b", True, "`", "`a``b`"),
         ],
     )
     def test_quote_seed_column(self, column, quote_config, quote_character, expected):

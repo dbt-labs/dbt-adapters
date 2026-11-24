@@ -53,7 +53,7 @@
 {% macro alter_relation_rename_column(relation, source_column, target_column, target_column_type, table_type = 'hive') -%}
   {% set sql -%}
       alter {{ relation.type }} {{ relation.render_pure() }}
-          change column {{ source_column }} {{ target_column }} {{ ddl_data_type(target_column_type, table_type) }}
+          change column `{{ source_column | replace('`', '``') }}` `{{ target_column | replace('`', '``') }}` {{ ddl_data_type(target_column_type, table_type) }}
   {%- endset -%}
   {{ return(run_query(sql)) }}
 {% endmacro %}

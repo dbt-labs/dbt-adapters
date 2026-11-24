@@ -51,10 +51,22 @@ class TestSnapshotGrantsSpark(BaseSnapshotGrants):
         }
 
 
-@pytest.mark.skip_profile("apache_spark", "spark_session")
-class TestInvalidGrantsSpark(BaseInvalidGrants):
+class BaseInvalidGrantsSpark(BaseInvalidGrants):
     def grantee_does_not_exist_error(self):
         return "RESOURCE_DOES_NOT_EXIST"
 
+
+@pytest.mark.skip_profile(
+    "apache_spark", "spark_session", "databricks_cluster", "databricks_http_cluster"
+)
+class TestInvalidGrantsSpark(BaseInvalidGrantsSpark):
+    def privilege_does_not_exist_error(self):
+        return "INVALID_PRIVILEGE"
+
+
+@pytest.mark.skip_profile(
+    "apache_spark", "spark_session", "spark_http_odbc", "databricks_sql_endpoint"
+)
+class TestInvalidGrantsSparkCluster(BaseInvalidGrantsSpark):
     def privilege_does_not_exist_error(self):
         return "ActionType FAKE_PRIVILEGE"

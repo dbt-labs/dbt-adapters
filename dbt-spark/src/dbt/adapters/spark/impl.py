@@ -166,7 +166,8 @@ class SparkAdapter(SQLAdapter):
         return "timestamp"
 
     def quote(self, identifier: str) -> str:  # type:ignore
-        return "`{}`".format(identifier)
+        # An embedded backtick is doubled to keep the name a single identifier.
+        return "`{}`".format(str(identifier).replace("`", "``"))
 
     def _get_relation_information(self, row: "agate.Row") -> RelationInfo:
         """relation info was fetched with SHOW TABLES EXTENDED"""
