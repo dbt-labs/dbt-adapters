@@ -2,14 +2,8 @@
   {#-- Find and validate the incremental strategy #}
   {%- set strategy = config.get("incremental_strategy") or 'merge' -%}
 
-  {% set invalid_strategy_msg -%}
-    Invalid incremental strategy provided: {{ strategy }}
-    Expected one of: 'merge', 'insert_overwrite', 'microbatch'
-  {%- endset %}
-  {% if strategy not in ['merge', 'insert_overwrite', 'microbatch'] %}
-    {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
-  {% endif %}
-
+  {#-- Strategies other than the builtin ones are custom strategies, which are resolved
+       (and validated) via `adapter.get_incremental_strategy_macro` in the materialization --#}
   {% if strategy == 'microbatch' %}
     {% do bq_validate_microbatch_config(config) %}
   {% endif %}
@@ -43,7 +37,7 @@
 {% endmacro %}
 
 {% macro bq_generate_incremental_build_sql(
-    strategy, tmp_relation, target_relation, sql, unique_key, partition_by, partitions, dest_columns, tmp_relation_exists, copy_partitions, incremental_predicates
+    strategy, tmp_relation, target_relation, sql, unique_key, partition_by, partitions, dest_columns, tmp_relation_exists, copy_partitions, incremental_predicates, custom_strategy_macro=none
 ) %}
   {#-- if partitioned, use BQ scripting to get the range of partition values to be updated --#}
   {% if strategy == 'insert_overwrite' %}
@@ -58,10 +52,23 @@
         tmp_relation, target_relation, sql, unique_key, partition_by, partitions, dest_columns, tmp_relation_exists, copy_partitions
     ) %}
 
-  {% else %} {# strategy == 'merge' #}
+  {% elif strategy == 'merge' %}
     {% set build_sql = bq_generate_incremental_merge_build_sql(
         tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, incremental_predicates
     ) %}
+
+  {% else %} {# custom strategy #}
+    {% set strategy_arg_dict = ({
+        'target_relation': target_relation,
+        'temp_relation': tmp_relation,
+        'unique_key': unique_key,
+        'dest_columns': dest_columns,
+        'incremental_predicates': incremental_predicates,
+        'partition_by': partition_by,
+        'partitions': partitions,
+        'copy_partitions': copy_partitions
+    }) %}
+    {% set build_sql = custom_strategy_macro(strategy_arg_dict) %}
 
   {% endif %}
 
@@ -81,6 +88,9 @@
 
   {#-- Validate early so we don't run SQL if the strategy is invalid --#}
   {% set strategy = dbt_bigquery_validate_get_incremental_strategy(config) -%}
+  {#-- Custom strategies resolve to a user-defined `get_incremental_<strategy>_sql` macro --#}
+  {% set is_custom_strategy = strategy not in ['merge', 'insert_overwrite', 'microbatch'] %}
+  {% set custom_strategy_macro = adapter.get_incremental_strategy_macro(context, strategy) if is_custom_strategy else none %}
 
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set partition_by = adapter.parse_partition_by(raw_partition_by) -%}
@@ -135,9 +145,9 @@
     {%- endif -%}
 
     {% set tmp_relation_exists = false %}
-    {% if on_schema_change != 'ignore' or language == 'python' %}
+    {% if on_schema_change != 'ignore' or language == 'python' or is_custom_strategy %}
       {#-- Check first, since otherwise we may not build a temp table --#}
-      {#-- Python always needs to create a temp table --#}
+      {#-- Python and custom strategies always need to create a temp table --#}
       {%- call statement('create_tmp_relation', language=language) -%}
         {{ bq_create_table_as(partition_by, True, tmp_relation, compiled_code, language) }}
       {%- endcall -%}
@@ -155,7 +165,7 @@
     {% endif %}
 
     {% set build_sql = bq_generate_incremental_build_sql(
-        strategy, tmp_relation, target_relation, compiled_code, unique_key, partition_by, partitions, dest_columns, tmp_relation_exists, partition_by.copy_partitions, incremental_predicates
+        strategy, tmp_relation, target_relation, compiled_code, unique_key, partition_by, partitions, dest_columns, tmp_relation_exists, partition_by.copy_partitions, incremental_predicates, custom_strategy_macro
     ) %}
 
     {%- call statement('main') -%}
