@@ -1,0 +1,6 @@
+kind: Fixes
+body: Remove the stray trailing backtick from the warning for numeric columns with unspecified precision or scale.
+time: 2026-11-13T10:14:26.801489+00:00
+custom:
+    Author: arijitroy003
+    Issue: "2079"
