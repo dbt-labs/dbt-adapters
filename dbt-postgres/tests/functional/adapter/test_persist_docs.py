@@ -3,6 +3,7 @@ import json
 
 from dbt.tests.adapter.materialized_view import files
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsUnquotedColumnCaseInsensitive,
     BasePersistDocs,
     BasePersistDocsAllColumnsMissing,
     BasePersistDocsColumnMissing,
@@ -80,3 +81,7 @@ class TestPersistDocsWithMaterializedView(BasePersistDocs):
         assert len(catalog_data["nodes"]) == 2
         view_node = catalog_data["nodes"]["model.test.my_materialized_view"]
         assert view_node["metadata"]["comment"].startswith("Materialized view model description")
+
+
+class TestPersistDocsUnquotedColumnCaseInsensitive(BasePersistDocsUnquotedColumnCaseInsensitive):
+    pass
