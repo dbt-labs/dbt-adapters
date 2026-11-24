@@ -1,0 +1,6 @@
+kind: Fixes
+body: Quote unique_key, merge_update_columns and the microbatch event_time column for incremental models in a Glue catalog-linked database, whose lowercase columns an unquoted name could not match
+time: 2026-10-30T18:23:54.994638+05:30
+custom:
+    Author: aahel
+    Issue: "1473"

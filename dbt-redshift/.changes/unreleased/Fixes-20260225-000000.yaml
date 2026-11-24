@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix crash in materialized_view_config_changeset when materialized view has no rows
+time: 2026-02-25T00:00:00.000000+00:00
+custom:
+    Author: dydyxylish
+    Issue: "1256"

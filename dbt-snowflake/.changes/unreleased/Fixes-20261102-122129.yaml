@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix ApproximateMatchError when looking up existing tables in a catalog-linked database with CASE_INSENSITIVE identifier resolution
+time: 2026-11-02T12:21:29.83753+05:30
+custom:
+    Author: aahel
+    Issue: "1480"

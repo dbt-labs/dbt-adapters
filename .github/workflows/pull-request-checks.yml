@@ -185,6 +185,7 @@ jobs:
         needs:
             [
                 check-run-approval,
+                affected-packages,
                 changelog-entry-check,
                 code-quality,
                 verify-build,

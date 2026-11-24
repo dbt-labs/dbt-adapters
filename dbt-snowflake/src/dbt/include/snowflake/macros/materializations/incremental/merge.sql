@@ -38,6 +38,14 @@
 {% endmacro %}
 
 
+{% macro snowflake__get_merge_update_columns(merge_update_columns, merge_exclude_columns, dest_columns) %}
+    {%- set update_columns = default__get_merge_update_columns(merge_update_columns, merge_exclude_columns, dest_columns) -%}
+    {#-- merge_update_columns come straight from config, so Glue needs them quoted --#}
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+    {% do return(snowflake__quote_glue_columns(update_columns, dest_columns, catalog_relation)) %}
+{% endmacro %}
+
+
 {% macro snowflake__get_delete_insert_merge_sql(target, source, unique_key, dest_columns, incremental_predicates) %}
     {% set dml = default__get_delete_insert_merge_sql(target, source, unique_key, dest_columns, incremental_predicates) %}
     {#-- Skip transaction wrapping for catalog-linked databases --#}
@@ -76,16 +84,18 @@
     {%- set source = arg_dict["temp_relation"] -%}
     {%- set dest_columns = arg_dict["dest_columns"] -%}
     {%- set incremental_predicates = [] if arg_dict.get('incremental_predicates') is none else arg_dict.get('incremental_predicates') -%}
+    {%- set event_time = snowflake__quote_glue_columns(model.config.event_time, dest_columns, arg_dict.get('catalog_relation')) -%}
 
     {#-- Add additional incremental_predicates to filter for batch --#}
     {% if model.batch and model.batch.event_time_start -%}
-        {% do incremental_predicates.append("DBT_INTERNAL_TARGET." ~ model.config.event_time ~ " >= to_timestamp_tz('" ~ model.config.__dbt_internal_microbatch_event_time_start ~ "')") %}
+        {% do incremental_predicates.append("DBT_INTERNAL_TARGET." ~ event_time ~ " >= to_timestamp_tz('" ~ model.config.__dbt_internal_microbatch_event_time_start ~ "')") %}
     {% endif %}
     {% if model.batch and model.batch.event_time_end -%}
-        {% do incremental_predicates.append("DBT_INTERNAL_TARGET." ~ model.config.event_time ~ " < to_timestamp_tz('" ~ model.config.__dbt_internal_microbatch_event_time_end ~ "')") %}
+        {% do incremental_predicates.append("DBT_INTERNAL_TARGET." ~ event_time ~ " < to_timestamp_tz('" ~ model.config.__dbt_internal_microbatch_event_time_end ~ "')") %}
     {% endif %}
     {% do arg_dict.update({'incremental_predicates': incremental_predicates}) %}
 
+    {%- set dml -%}
     delete from {{ target }} DBT_INTERNAL_TARGET
     where (
     {% for predicate in incremental_predicates %}
@@ -99,4 +109,12 @@
         select {{ dest_cols_csv }}
         from {{ source }}
     )
+    {%- endset -%}
+
+    {#-- Skip transaction wrapping for catalog-linked databases --#}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+        {% do return(dml) %}
+    {% else %}
+        {% do return(snowflake_dml_explicit_transaction(dml)) %}
+    {% endif %}
 {% endmacro %}

@@ -205,6 +205,165 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsReuseConnections:
+    """auth_args() never passes reuse_connections to the connector: it is dbt's own
+    pooling switch, read by SnowflakeConnectionManager.release()"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    def test_reuse_connections_defaults_to_true(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_unset_with_keep_alive_is_not_passed(self, base_credentials):
+        # when client_session_keep_alive is set, reuse_connections stays None;
+        # passing None to the connector is a hard error on connector 5.x
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True
+        )
+        assert creds.reuse_connections is None
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_false_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=False
+        )
+        assert creds.reuse_connections is False
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_true_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=True
+        )
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    @pytest.mark.parametrize(
+        "reuse_connections,released",
+        [(True, False), (False, True), (None, True)],
+    )
+    def test_release_honors_reuse_connections(self, reuse_connections, released):
+        manager = connections.SnowflakeConnectionManager.__new__(
+            connections.SnowflakeConnectionManager
+        )
+        manager.profile = Mock(credentials=Mock(reuse_connections=reuse_connections))
+        with patch.object(connections.SQLConnectionManager, "release") as parent_release:
+            manager.release()
+        assert parent_release.called is released
+
+
+class TestSnowflakeCredentialsCertRevocationCheckMode:
+    """`revocation_check_mode` maps to the OCSP options on connector 4.x, and to
+    `crl_check_mode` on connector 5.x, which has no OCSP"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    @pytest.mark.parametrize(
+        "connector_major_version,profile_settings,expected_args",
+        [
+            (4, {}, {"disable_ocsp_checks": False, "ocsp_fail_open": True}),
+            (
+                4,
+                {"revocation_check_mode": "ENABLED"},
+                {"disable_ocsp_checks": False, "ocsp_fail_open": False},
+            ),
+            (
+                4,
+                {"revocation_check_mode": "DISABLED"},
+                {"disable_ocsp_checks": True, "ocsp_fail_open": True},
+            ),
+            (4, {"insecure_mode": True}, {"disable_ocsp_checks": True, "ocsp_fail_open": True}),
+            # CRL checks are opt-in on 5.x: nothing is passed when the mode is unset
+            (5, {}, {}),
+            (5, {"revocation_check_mode": "ADVISORY"}, {"crl_check_mode": "ADVISORY"}),
+            (5, {"revocation_check_mode": "ENABLED"}, {"crl_check_mode": "ENABLED"}),
+            (5, {"revocation_check_mode": "DISABLED"}, {"crl_check_mode": "DISABLED"}),
+            (5, {"insecure_mode": True}, {"crl_check_mode": "DISABLED"}),
+        ],
+        ids=[
+            "4_default",
+            "4_enabled",
+            "4_disabled",
+            "4_insecure_mode",
+            "5_default",
+            "5_advisory",
+            "5_enabled",
+            "5_disabled",
+            "5_insecure_mode",
+        ],
+    )
+    def test_revocation_check_args(
+        self, base_credentials, connector_major_version, profile_settings, expected_args
+    ):
+        if connector_major_version == 4:
+            expected_args = {**expected_args, "ocsp_root_certs_dict_lock_timeout": 10}
+        creds = connections.SnowflakeCredentials(**base_credentials, **profile_settings)
+        with patch.object(
+            connections, "_connector_major_version", return_value=connector_major_version
+        ):
+            assert creds.revocation_check_args() == expected_args
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (None, None),
+            ("advisory", "ADVISORY"),
+            ("Enabled", "ENABLED"),
+            ("DISABLED", "DISABLED"),
+        ],
+    )
+    def test_mode_is_normalized(self, base_credentials, value, expected):
+        creds = connections.SnowflakeCredentials(**base_credentials, revocation_check_mode=value)
+        assert creds.revocation_check_mode == expected
+
+    def test_default_mode_is_unset(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.revocation_check_mode is None
+
+    def test_invalid_mode_raises(self, base_credentials):
+        with pytest.raises(DbtConfigError, match="Invalid revocation_check_mode 'strict'"):
+            connections.SnowflakeCredentials(**base_credentials, revocation_check_mode="strict")
+
+    def test_insecure_mode_with_enabled_raises(self, base_credentials):
+        with pytest.raises(DbtConfigError, match="cannot be combined"):
+            connections.SnowflakeCredentials(
+                **base_credentials, insecure_mode=True, revocation_check_mode="ENABLED"
+            )
+
+    def test_replace_keeps_settings(self, base_credentials):
+        # `replace()` runs `__post_init__` again on values it already normalized
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, revocation_check_mode="enabled"
+        )
+        assert creds.replace(user="other_user").revocation_check_mode == "ENABLED"
+
+        insecure = connections.SnowflakeCredentials(**base_credentials).replace(insecure_mode=True)
+        with patch.object(connections, "_connector_major_version", return_value=5):
+            assert insecure.revocation_check_args() == {"crl_check_mode": "DISABLED"}
+
+    def test_connector_major_version_reads_installed_connector(self):
+        assert connections._connector_major_version() in (4, 5)
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 

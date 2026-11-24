@@ -220,3 +220,21 @@ class TestSparkMacros(unittest.TestCase):
                 self.assertIn(
                     f"cast(({interval}) * {multiplier} as int)", re.sub(r"\s\s+", " ", sql)
                 )
+
+    def test_macros_alter_column_type_quotes_column_name(self):
+        statements = []
+
+        def statement(*args, caller=None, **kwargs):
+            statements.append(caller())
+            return ""
+
+        self.default_context["statement"] = statement
+        self.default_context["adapter"].quote = lambda identifier: f"<quoted {identifier}>"
+        template = self.__get_template("adapters.sql")
+
+        template.module.spark__alter_column_type("my_table", "a`b", "string")
+
+        self.assertEqual(
+            re.sub(r"\s\s+", " ", statements[0]).strip(),
+            "alter table my_table alter column <quoted a`b> type string;",
+        )

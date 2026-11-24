@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import (
@@ -13,8 +14,10 @@ from typing import (
     Tuple,
 )
 
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -25,6 +28,7 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.exceptions import ApproximateMatchError
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -42,6 +46,7 @@ from dbt_common.contracts.metadata import (
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
+from dbt_common.record import auto_record_function
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
@@ -88,6 +93,46 @@ SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
         "external_volume = 'SNOWFLAKE_MANAGED' and suppress base_location, enabling "
         "Snowflake Horizon managed storage out of the box. When disabled (default), no "
         "external_volume clause is emitted and Snowflake resolves the schema or account default."
+    ),
+)
+
+SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION = BehaviorFlag(
+    name="snowflake_fail_on_unexpected_existing_relation",
+    default=True,
+    description=(
+        "When enabled (the default), incremental models and snapshots that are not in dbt's "
+        "relation cache are created with CREATE instead of CREATE OR REPLACE. If the table "
+        "exists anyway (for example, the metadata listing that populated the cache was "
+        "incomplete, or the table was created concurrently), the statement fails instead of "
+        "silently replacing the existing table and its data. Disabling this flag restores the "
+        "previous behavior, which can replace existing tables without warning."
+    ),
+)
+
+SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER = BehaviorFlag(
+    name="snowflake_dynamic_table_create_or_alter",
+    default=False,
+    description=(
+        "When enabled, native (info schema) dynamic tables are synced with CREATE OR ALTER DYNAMIC "
+        "TABLE on every run, so edits to the model's SQL are deployed without --full-refresh "
+        "(matching CTAS experience). WARNING: for INCREMENTAL and AUTO refresh modes, a definition "
+        "edit reinitializes the dynamic table (full recompute, incremental state discarded) -- this "
+        "diverges from dbt incremental models, where a logic change requires --full-refresh. CREATE "
+        "OR ALTER does not support every schema change (e.g. column reorder, mid-list insert, type "
+        "narrowing, an incompatible column type change); incompatible edits still require "
+        "--full-refresh, and dbt appends a hint saying so to the error of a failed CREATE OR ALTER. "
+        "Snowflake compares the stored query text literally, so the first sync of an INCREMENTAL or "
+        "AUTO table built by a dbt version that rendered the query with different whitespace may "
+        "reinitialize it once, even when the SQL is unchanged. If `transient` is not set explicitly "
+        "and the effective transient default diverges from the live table (the default flag changed, "
+        "or an explicit `transient` was removed), dbt does not detect it and CREATE OR ALTER attempts "
+        "a transient flip that Snowflake rejects -- recover with --full-refresh. With "
+        "on_configuration_change='continue', a run carrying both a config change and a SQL edit skips "
+        "both. Managed (Snowflake-catalog) Iceberg dynamic tables are synced the same way; their "
+        "Iceberg identity (external volume, base location, Iceberg version) cannot change, and "
+        "converting between a native and an Iceberg dynamic table is rebuilt with CREATE OR REPLACE. "
+        "Dynamic tables in externally owned catalogs keep create-or-replace behavior. When disabled "
+        "(default), behavior is unchanged."
     ),
 )
 
@@ -176,12 +221,18 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION,
+            SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+        self._case_insensitive_databases: Dict[str, bool] = {}
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
@@ -254,6 +305,51 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
+    def _make_match(
+        self,
+        relations_list: List[BaseRelation],
+        database: str,
+        schema: str,
+        identifier: str,
+    ) -> List[BaseRelation]:
+        try:
+            return super()._make_match(relations_list, database, schema, identifier)
+        except ApproximateMatchError as exc:
+            # A catalog-linked database in CASE_INSENSITIVE mode stores names in lowercase and
+            # resolves unquoted names case-insensitively, so dbt's uppercased search name and
+            # the lowercase name from SHOW OBJECTS refer to the same object.
+            if not self._is_case_insensitive_catalog_linked_database(exc.relation.database):
+                raise
+
+        search = self._make_match_kwargs(database, schema, identifier)
+        return [
+            relation
+            for relation in relations_list
+            if all(
+                str(relation.path.get_lowered_part(part)) == value.lower()
+                for part, value in search.items()
+            )
+        ]
+
+    def _is_case_insensitive_catalog_linked_database(self, database: Optional[str]) -> bool:
+        if not database:
+            return False
+        if database not in self._case_insensitive_databases:
+            sql = (
+                "select system$get_catalog_linked_database_config("
+                f"'{_sql_literal(self.quote(database))}')"
+            )
+            try:
+                _, table = self.execute(sql, fetch=True)
+                config = json.loads(table[0][0])
+            except (DbtDatabaseError, ValueError, TypeError, IndexError):
+                # 001006: not a catalog-linked database
+                config = {}
+            self._case_insensitive_databases[database] = (
+                str(config.get("catalog_case_sensitivity", "")).upper() == "CASE_INSENSITIVE"
+            )
+        return self._case_insensitive_databases[database]
+
     def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
@@ -299,6 +395,27 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             else:
                 raise
+
+    @auto_record_function("AdapterGetColumnSchemaFromQuery", group="Available")
+    @available.parse(lambda *a, **k: [])
+    def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
+        """Get a list of the Columns with names and data types from the given sql.
+
+        FIXED (NUMBER/DECIMAL) columns also carry their precision and scale, so DDL built
+        from them keeps the declared type. dtype stays FIXED, which contracts compare on.
+        """
+        _, cursor = self.connections.add_select_query(sql)
+        columns = []
+        # https://peps.python.org/pep-0249/#description
+        for column_name, column_type_code, _, _, precision, scale, *_ in cursor.description:
+            column = self.Column.create(
+                column_name, self.connections.data_type_code_to_name(column_type_code)
+            )
+            if column.dtype == "FIXED":
+                column.numeric_precision = precision
+                column.numeric_scale = scale
+            columns.append(column)
+        return columns
 
     def _show_object_metadata(self, relation: SnowflakeRelation) -> Optional[dict]:
         try:

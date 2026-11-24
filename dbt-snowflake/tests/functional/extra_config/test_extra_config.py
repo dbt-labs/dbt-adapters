@@ -40,7 +40,7 @@ _MODELS_TABLE_ROW_ACCESS_POLICY = """
 select 1 as id
 """
 _DDL_MODELS_TABLE_ROW_ACCESS_POLICY = (
-    """.table_row_access_policy with row access policy always_true on (id) as"""
+    """.table_row_access_policy ignore grants with row access policy always_true on (id) as"""
 )
 
 _MODELS_TABLE_TAG = """
@@ -51,7 +51,7 @@ _MODELS_TABLE_TAG = """
 
 select 1 as id
 """
-_DDL_MODELS_TABLE_TAG = """.table_tag with tag (tag_name = 'tag_value')"""
+_DDL_MODELS_TABLE_TAG = """.table_tag ignore grants with tag (tag_name = 'tag_value')"""
 
 _MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY = """
 {{ config(
@@ -62,7 +62,7 @@ _MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY = """
 
 select 1 as id
 """
-_DDL_MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY = """.table_tag_and_row_access_policy with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
+_DDL_MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY = """.table_tag_and_row_access_policy ignore grants with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
 
 # View model templates
 _MODELS_VIEW_ROW_ACCESS_POLICY = """
@@ -74,7 +74,7 @@ _MODELS_VIEW_ROW_ACCESS_POLICY = """
 select 1 as id
 """
 _DDL_MODELS_VIEW_ROW_ACCESS_POLICY = (
-    """.view_row_access_policy with row access policy always_true on (id) as"""
+    """.view_row_access_policy ignore grants with row access policy always_true on (id) as"""
 )
 
 _MODELS_VIEW_TAG = """
@@ -85,7 +85,7 @@ _MODELS_VIEW_TAG = """
 
 select 1 as id
 """
-_DDL_MODELS_VIEW_TAG = """view_tag with tag (tag_name = 'tag_value')"""
+_DDL_MODELS_VIEW_TAG = """view_tag ignore grants with tag (tag_name = 'tag_value')"""
 
 _MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY = """
 {{ config(
@@ -96,9 +96,11 @@ _MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY = """
 
 select 1 as id
 """
-_DDL_MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY = """view_tag_and_row_access_policy with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
+_DDL_MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY = """view_tag_and_row_access_policy ignore grants with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
 
 # Incremental model templates
+# These models only run once, so their table is created with plain CREATE (no OR REPLACE), which
+# omits the IGNORE GRANTS clause that table and view DDL carry.
 _MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """
 {{ config(
     materialized = 'incremental',

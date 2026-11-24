@@ -1,0 +1,6 @@
+kind: Fixes
+body: Render the dynamic table `as (...)` query block identically in CREATE, CREATE OR REPLACE and CREATE OR ALTER, so Snowflake does not see a definition change (and reinitialize the table) on the first CREATE OR ALTER after a create. Omit an unset `base_location` from CREATE OR REPLACE DYNAMIC ICEBERG TABLE instead of rendering `'None'`.
+time: 2026-11-12T18:36:14.986091-08:00
+custom:
+    Author: igorbelianski-cyber
+    Issue: "1825"
