@@ -253,23 +253,37 @@ class SparkAdapter(SQLAdapter):
             )
         except DbtRuntimeError as e:
             errmsg = getattr(e, "msg", "")
-            if any(msg in errmsg for msg in SCHEMA_NOT_FOUND_MESSAGES) or any(
-                msg in errmsg for msg in TABLE_OR_VIEW_NOT_FOUND_MESSAGES
-            ):
+            if any(msg in errmsg for msg in SCHEMA_NOT_FOUND_MESSAGES):
                 return []
+            elif any(msg in errmsg for msg in TABLE_OR_VIEW_NOT_FOUND_MESSAGES):
+                # SHOW TABLE EXTENDED loads every table in the schema (Spark 4 with Iceberg),
+                # so a table dropped mid-statement fails the whole listing. That does not mean
+                # the schema is empty, and caching it as empty makes incremental models and
+                # snapshots rebuild. List with SHOW TABLES instead, which does not load tables.
+                try:
+                    return self._list_relations_using_show_tables(kwargs)
+                except DbtRuntimeError as fallback_error:
+                    fallback_errmsg = getattr(fallback_error, "msg", "")
+                    if any(
+                        msg in fallback_errmsg
+                        for msg in SCHEMA_NOT_FOUND_MESSAGES + TABLE_OR_VIEW_NOT_FOUND_MESSAGES
+                    ):
+                        return []
+                    raise
             # Iceberg compute engine behavior: show table
             elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
                 # this happens with spark-iceberg with v2 iceberg tables
                 # https://issues.apache.org/jira/browse/SPARK-33393
-                show_table_rows = self.execute_macro(
-                    LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
-                )
-                return self._build_spark_relation_list(
-                    row_list=show_table_rows,
-                    relation_info_func=self._get_relation_information_using_describe,
-                )
+                return self._list_relations_using_show_tables(kwargs)
             else:
                 raise
+
+    def _list_relations_using_show_tables(self, kwargs: Dict[str, Any]) -> List[BaseRelation]:
+        show_table_rows = self.execute_macro(LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs)
+        return self._build_spark_relation_list(
+            row_list=show_table_rows,
+            relation_info_func=self._get_relation_information_using_describe,
+        )
 
     def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
         if not self.Relation.get_default_include_policy().database:

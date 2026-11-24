@@ -1,0 +1,6 @@
+kind: Fixes
+body: List relations with SHOW TABLES when a table is dropped during SHOW TABLE EXTENDED, instead of treating the schema as empty and rebuilding incremental models
+time: 2026-11-24T12:00:00.000000+05:30
+custom:
+    Author: ash2shukla
+    Issue: "2346"
