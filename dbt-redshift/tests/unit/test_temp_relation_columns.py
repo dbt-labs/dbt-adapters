@@ -88,8 +88,8 @@ def _numeric_modifier(precision, scale):
     return ((precision << 16) | scale) + 4
 
 
-# OIDs redshift_connector names but this adapter does not map, and the labels it gives them.
-DRIVER_ONLY_TYPES = {1015: "VARCHAR_ARRAY", 28: "XID"}
+# Driver labels used when testing the adapter's type resolution.
+DRIVER_TYPE_NAMES = {1015: "VARCHAR_ARRAY", 28: "XID", 3999: "GEOMETRYHEX"}
 
 
 class _StubConnections:
@@ -104,9 +104,9 @@ class _StubConnections:
     def data_type_code_to_name(type_code):
         # The real implementation is `RedshiftOID(oid).name`, an IntEnum call, so it raises
         # rather than returning a label for an OID the driver doesn't know.
-        if type_code not in DRIVER_ONLY_TYPES:
+        if type_code not in DRIVER_TYPE_NAMES:
             raise ValueError(f"{type_code} is not a valid RedshiftOID")
-        return DRIVER_ONLY_TYPES[type_code]
+        return DRIVER_TYPE_NAMES[type_code]
 
 
 class _StubAdapter:
@@ -283,6 +283,17 @@ class TestGetColumnsInTempRelation:
         adapter = _StubAdapter(columns)
         adapter.Column = _FakeColumn
         return adapter
+
+    @pytest.mark.parametrize("datasharing", [True, False])
+    def test_geometry_wire_oid_matches_catalog_type(self, datasharing):
+        adapter = self._adapter_with_columns([("shape", 3999, None)])
+        adapter.datasharing = datasharing
+
+        columns = RedshiftAdapter.get_columns_in_temp_relation(
+            adapter, mock.Mock(identifier="model__dbt_tmp123")
+        )
+
+        assert [(column.column, column.dtype) for column in columns] == [("shape", "geometry")]
 
     def test_describes_columns_with_sizes_only_where_they_matter(self):
         columns = [
