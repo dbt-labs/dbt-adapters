@@ -74,3 +74,35 @@ def test_behaviour_flags_property_empty(adapter_default_behaviour_flags):
 def test_behavior_property_has_defaults(adapter_default_behaviour_flags):
     for flag in DEFAULT_BASE_BEHAVIOR_FLAGS:
         assert hasattr(adapter_default_behaviour_flags.behavior, flag["name"])
+
+
+def test_behavior_setter_does_not_mutate_shared_flags(
+    adapter_default_behaviour_flags,
+):
+    """Adapter behavior initialization must not grow shared flag definitions."""
+    from dbt.adapters.base.impl import BaseAdapter
+
+    from unittest.mock import PropertyMock, patch
+
+    adapter = adapter_default_behaviour_flags
+    original_flags = list(DEFAULT_BASE_BEHAVIOR_FLAGS)
+    adapter_flag = {
+        "name": "test_adapter_specific_flag",
+        "default": False,
+        "description": "Regression test for shared behavior flags.",
+    }
+
+    try:
+        with patch.object(
+            type(adapter),
+            "_behavior_flags",
+            new_callable=PropertyMock,
+            return_value=[adapter_flag],
+        ):
+            for _ in range(10):
+                BaseAdapter.behavior.fset(adapter, DEFAULT_BASE_BEHAVIOR_FLAGS)
+
+                assert DEFAULT_BASE_BEHAVIOR_FLAGS == original_flags
+                assert hasattr(adapter.behavior, adapter_flag["name"])
+    finally:
+        DEFAULT_BASE_BEHAVIOR_FLAGS[:] = original_flags
