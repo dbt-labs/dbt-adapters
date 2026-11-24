@@ -1,0 +1,6 @@
+kind: Features
+body: Add a `reuse_connections` profile setting that keeps each thread's BigQuery client open between nodes instead of creating a new client for every node
+time: 2026-11-18T20:00:00.000000Z
+custom:
+    Author: james-durand-dbt
+    Issue: ""
