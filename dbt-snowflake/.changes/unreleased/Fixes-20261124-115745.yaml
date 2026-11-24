@@ -1,0 +1,6 @@
+kind: Fixes
+body: Preserve the text of BINARY values in dbt macros when the Snowflake connector returns JSON results. Set the snowflake_preserve_native_binary_results behavior flag to true to use the connector's native representation.
+time: 2026-11-24T11:57:45.825782+05:30
+custom:
+    Author: sriramr98
+    Issue: "0"

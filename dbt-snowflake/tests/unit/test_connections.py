@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch, call
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt_common.exceptions import DbtConfigError
+from dbt.adapters.snowflake.impl import SnowflakeAdapter
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -549,3 +550,32 @@ def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_an
         "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
         in str(excinfo)
     )
+
+
+@pytest.mark.parametrize("limit", [None, 1])
+@pytest.mark.parametrize(
+    "result_format, binary, default_text, native_text",
+    [
+        ("json", b"\x00\xff", "b'\\x00\\xff'", "b'\\x00\\xff'"),
+        ("json", bytearray(b"\x00\xff"), "b'\\x00\\xff'", "bytearray(b'\\x00\\xff')"),
+        ("arrow", bytearray(b"\x00\xff"), "bytearray(b'\\x00\\xff')", "bytearray(b'\\x00\\xff')"),
+        (None, bytearray(b"\x00\xff"), "bytearray(b'\\x00\\xff')", "bytearray(b'\\x00\\xff')"),
+    ],
+)
+@pytest.mark.parametrize("preserve", [False, True], ids=["default", "preserve_native"])
+def test_binary_macro_result(result_format, binary, default_text, native_text, limit, preserve):
+    cursor = Mock(description=[("PAYLOAD",)], _query_result_format=result_format)
+    rows = [(binary,), (None,)]
+    cursor.fetchall.return_value = rows
+    cursor.fetchmany.return_value = rows[:1]
+
+    flags = {"snowflake_preserve_native_binary_results": True} if preserve else {}
+    manager = SnowflakeAdapter(Mock(flags=flags), multiprocessing.get_context("spawn")).connections
+    with (
+        patch.object(manager, "add_query", return_value=(None, cursor)),
+        patch.object(manager, "get_response"),
+    ):
+        _, table = manager.execute("select payload", fetch=True, limit=limit)
+
+    expected = native_text if preserve else default_text
+    assert list(table.columns["PAYLOAD"]) == ([expected] if limit else [expected, None])
