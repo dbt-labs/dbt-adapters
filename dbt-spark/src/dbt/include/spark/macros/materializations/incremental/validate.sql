@@ -19,11 +19,6 @@
 {% macro dbt_spark_validate_get_incremental_strategy(raw_strategy, file_format) %}
   {#-- Validate the incremental strategy #}
 
-  {% set invalid_strategy_msg -%}
-    Invalid incremental strategy provided: {{ raw_strategy }}
-    Expected one of: 'append', 'merge', 'insert_overwrite', 'microbatch'
-  {%- endset %}
-
   {% set invalid_merge_msg -%}
     Invalid incremental strategy provided: {{ raw_strategy }}
     You can only choose this strategy when file_format is set to 'delta' or 'iceberg' or 'hudi'
@@ -35,9 +30,9 @@
     Use the 'append' or 'merge' strategy instead
   {%- endset %}
 
-  {% if raw_strategy not in ['append', 'merge', 'insert_overwrite', 'microbatch'] %}
-    {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
-  {%-else %}
+  {#-- Strategies other than the builtin ones are custom strategies, which are resolved
+       (and validated) via `adapter.get_incremental_strategy_macro` in the materialization --#}
+  {% if raw_strategy in ['append', 'merge', 'insert_overwrite', 'microbatch'] %}
     {% if raw_strategy == 'merge' and file_format not in ['delta', 'iceberg', 'hudi'] %}
       {% do exceptions.raise_compiler_error(invalid_merge_msg) %}
     {% endif %}
