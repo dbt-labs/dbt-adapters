@@ -98,12 +98,13 @@ class TestSnowflakeCreateTableInfoSchemaSql(unittest.TestCase):
         self.assertIn("ignore grants", sql)
         self.assertNotIn("copy grants", sql)
 
-    def test_unset_copy_grants_emits_ignore_grants(self):
+    def test_unset_copy_grants_emits_no_grants_clause(self):
         sql = self._render()
-        self.assertIn("ignore grants", sql)
+        self.assertIn("create or replace", sql)
+        self.assertNotIn("grants", sql)
 
     def test_ignore_grants_precedes_copy_tags(self):
-        self.config = {"copy_tags": True}
+        self.config = {"copy_grants": False, "copy_tags": True}
         sql = self._render()
         self.assertLess(sql.index("ignore grants"), sql.index("copy tags"))
 
