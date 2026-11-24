@@ -1,0 +1,6 @@
+kind: Fixes
+body: With populate_cache off, adding a relation to the cache no longer marks its schema as listed, so later lookups in that schema still list it and find existing relations.
+time: 2026-11-14T16:00:00.000000+01:00
+custom:
+  Author: Sam-Razavi
+  Issue: "2310"
