@@ -1233,6 +1233,73 @@ class TestRefreshWarehouseChangeset:
             assert changeset.snowflake_warehouse is None
 
 
+class TestRefreshModeChangeDetectionLogic:
+    """A desired AUTO matches the concrete mode Snowflake resolved it to, except
+    CUSTOM_INCREMENTAL: that is a switch between a custom incremental and a regular dynamic
+    table, which requires a full refresh.
+    https://docs.snowflake.com/en/user-guide/dynamic-tables/modify#refresh-mode-transitions"""
+
+    @staticmethod
+    def _changeset(desired, live):
+        import agate
+        from unittest.mock import MagicMock
+
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": "1 hour",
+            "warehouse": "MY_WH",
+            "refresh_mode": live,
+            "immutable_where": None,
+            "cluster_by": None,
+        }
+        relation_results = {
+            "dynamic_table": agate.Table(
+                [list(dt_row_data.values())],
+                list(dt_row_data.keys()),
+                [agate.Text()] * len(dt_row_data),
+            )
+        }
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        relation_config.config.extra = {
+            "target_lag": "1 hour",
+            "snowflake_warehouse": "MY_WH",
+            "refresh_mode": desired,
+        }
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return SnowflakeRelation.dynamic_table_config_changeset(relation_results, relation_config)
+
+    @pytest.mark.parametrize("live", ["INCREMENTAL", "FULL", "AUTO"])
+    def test_desired_auto_matches_a_resolved_mode(self, live):
+        assert self._changeset(None, live) is None
+        assert self._changeset("auto", live) is None
+
+    @pytest.mark.parametrize("desired", [None, "AUTO"])
+    def test_desired_auto_against_custom_incremental_is_a_switch(self, desired):
+        changeset = self._changeset(desired, "CUSTOM_INCREMENTAL")
+        assert changeset.refresh_mode.context == "AUTO"
+        assert changeset.requires_full_refresh
+
+    def test_custom_incremental_against_another_mode_is_a_switch(self):
+        changeset = self._changeset("custom_incremental", "INCREMENTAL")
+        assert changeset.refresh_mode.context == "CUSTOM_INCREMENTAL"
+        assert changeset.requires_full_refresh
+
+    def test_unchanged_custom_incremental_is_not_a_change(self):
+        assert self._changeset("CUSTOM_INCREMENTAL", "CUSTOM_INCREMENTAL") is None
+
+
 class TestCreateOrAlterBehaviorFlag:
     """The CREATE OR ALTER path is opt-in: this locks the default-off safety contract and
     that the flag stays wired into the adapter, so neither can be changed unnoticed."""

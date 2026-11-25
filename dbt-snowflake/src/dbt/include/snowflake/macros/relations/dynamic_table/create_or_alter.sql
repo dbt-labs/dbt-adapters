@@ -150,8 +150,12 @@
         {%- set is_transient = false -%}
     {%- endif -%}
     {%- set transient_keyword = 'transient ' if is_transient else '' -%}
+    {%- set custom_incremental = snowflake__dynamic_table_is_custom_incremental() -%}
+    {%- if custom_incremental -%}
+        {%- set columns = snowflake__custom_incremental_discover_columns(relation, sql) -%}
+    {%- endif -%}
 
-create or alter {{ transient_keyword }}dynamic table {{ relation }}
+create or alter {{ transient_keyword }}dynamic table {{ relation }}{% if custom_incremental %} {{ snowflake__list_columns(columns) }}{% endif %}
     {% if dynamic_table.target_lag is not none %}target_lag = '{{ dynamic_table.target_lag }}'{% endif %}
     warehouse = {{ dynamic_table.warehouse_parameter }}
     {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
@@ -165,9 +169,13 @@ create or alter {{ transient_keyword }}dynamic table {{ relation }}
     {% endif %}
     {{ optional('cluster by', dynamic_table.cluster_by, quote_char='(', equals_char='') }}
     {{ optional('immutable where', dynamic_table.immutable_where, quote_char='(', equals_char='') }}
+    {%- if custom_incremental %}
+    {{ snowflake__custom_incremental_refresh_using_sql(sql, columns) }}
+    {%- else %}
     as (
         {{ sql }}
     )
+    {%- endif %}
 
 {%- endmacro %}
 

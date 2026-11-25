@@ -70,6 +70,8 @@ class _MacroRenderer:
             "config": mock.Mock(),
             "exceptions": mock.Mock(),
             "return": lambda value: value,
+            # custom incremental dynamic tables are covered in test_dynamic_table_custom_incremental.py
+            "snowflake__dynamic_table_is_custom_incremental": lambda: False,
         }
         self.context["adapter"].behavior.snowflake_default_transient_dynamic_tables.no_warn = False
         self.context["adapter"].build_catalog_relation.return_value = _catalog_relation()

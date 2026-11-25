@@ -1,0 +1,9 @@
+kind: Features
+body: 'Snowflake custom incremental dynamic tables: a `dynamic_table` model with `refresh_mode=''CUSTOM_INCREMENTAL''`
+    and `incremental_strategy=''merge''` deploys as `refresh using (merge into SELF ...)`,
+    with optional `delete_condition`, and reads its change source with the new `changes(relation,
+    mode)` macro.'
+time: 2026-11-25T12:00:00.000000-08:00
+custom:
+    Author: newsatit
+    Issue: "2324"

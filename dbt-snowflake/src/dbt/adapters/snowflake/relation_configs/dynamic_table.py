@@ -26,6 +26,7 @@ class RefreshMode(StrEnum):
     AUTO = "AUTO"
     FULL = "FULL"
     INCREMENTAL = "INCREMENTAL"
+    CUSTOM_INCREMENTAL = "CUSTOM_INCREMENTAL"
 
     @classmethod
     def default(cls) -> Self:

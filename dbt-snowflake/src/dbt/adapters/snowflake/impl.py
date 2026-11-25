@@ -161,6 +161,7 @@ class SnowflakeConfig(AdapterConfig):
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     immutable_where: Optional[str] = None
+    delete_condition: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
