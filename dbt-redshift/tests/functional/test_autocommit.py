@@ -1,6 +1,7 @@
 import os
 import pytest
 
+from dbt.task import run_operation
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 _MACROS__CREATE_DB = """
@@ -58,6 +59,11 @@ id,status
 1,pending
 """.lstrip()
 
+# dbt-core commits a successful run-operation's open transaction from
+# dbt-labs/dbt#17203 onwards. Before that, run_query writes are rolled back
+# when autocommit is off.
+CORE_COMMITS_RUN_OPERATION = hasattr(run_operation, "_commit_if_open")
+
 
 class TestTransactionBlocksPreventCertainCommands:
     @pytest.fixture(scope="class")
@@ -114,7 +120,7 @@ class TestUpdateDDLCommits:
         assert "1 | sent" in out
 
 
-class TestUpdateDDLDoesNotCommitWithoutAutocommit:
+class TestUpdateDDLWithoutAutocommit:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
         return {
@@ -135,13 +141,14 @@ class TestUpdateDDLDoesNotCommitWithoutAutocommit:
     def models(self):
         return {"my_model.sql": _MODELS__MY_MODEL}
 
-    def test_update_will_not_go_through(self, project):
+    def test_update_commits_only_if_core_commits_run_operation(self, project):
         run_dbt()
         run_dbt(["run-operation", "update_some_model"])
         _, out = run_dbt_and_capture(
             ["show", "--inline", "select * from {}.my_model".format(project.test_schema)]
         )
-        assert "1 | pending" in out
+        expected = "sent" if CORE_COMMITS_RUN_OPERATION else "pending"
+        assert f"1 | {expected}" in out
 
 
 class TestAfterCommitMacroTakesEffect:

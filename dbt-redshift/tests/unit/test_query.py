@@ -104,3 +104,73 @@ class TestQuery(TestCase):
                     DbtRuntimeError, "Tried to run invalid SQL:  on test_connection"
                 ):
                     self.adapter.connections.add_query(sql="")
+
+    def _add_query_on(self, autocommit, transaction_open, in_transaction, auto_begin=False):
+        mock_connection = mock.MagicMock()
+        mock_connection.credentials.autocommit = autocommit
+        mock_connection.transaction_open = transaction_open
+        mock_connection.handle.in_transaction = in_transaction
+
+        with mock.patch(
+            "dbt.adapters.sql.SQLConnectionManager.add_query",
+            return_value=(mock_connection, mock.MagicMock()),
+        ):
+            with mock.patch.object(self.adapter.connections, "_initialize_sqlparse_lexer"):
+                self.adapter.connections.add_query(
+                    "insert into t values (1)", auto_begin=auto_begin
+                )
+        return mock_connection
+
+    def test_add_query_tracks_driver_transaction_without_autocommit(self):
+        """With autocommit off, a query run with auto_begin=False still opens a
+        transaction in redshift_connector, so dbt must track it to commit it."""
+        connection = self._add_query_on(
+            autocommit=False, transaction_open=False, in_transaction=True
+        )
+        assert connection.transaction_open is True
+
+    def test_add_query_leaves_state_when_driver_has_no_transaction(self):
+        connection = self._add_query_on(
+            autocommit=False, transaction_open=False, in_transaction=False
+        )
+        assert connection.transaction_open is False
+
+    def test_add_query_leaves_state_with_autocommit(self):
+        connection = self._add_query_on(
+            autocommit=True, transaction_open=False, in_transaction=True
+        )
+        assert connection.transaction_open is False
+
+    def test_add_query_tracks_driver_transaction_before_next_statement(self):
+        """The flag is set after each statement, so it is already True when a
+        later statement in the same call runs (and possibly fails)."""
+        mock_connection = mock.MagicMock()
+        mock_connection.credentials.autocommit = False
+        mock_connection.transaction_open = False
+        mock_connection.handle.in_transaction = True
+        seen_on_second_statement = []
+
+        def fake_add_query(query, *args, **kwargs):
+            if query.startswith("select"):
+                seen_on_second_statement.append(mock_connection.transaction_open)
+                raise DbtRuntimeError("boom")
+            return mock_connection, mock.MagicMock()
+
+        with mock.patch(
+            "dbt.adapters.sql.SQLConnectionManager.add_query", side_effect=fake_add_query
+        ):
+            with mock.patch.object(self.adapter.connections, "_initialize_sqlparse_lexer"):
+                with self.assertRaisesRegex(DbtRuntimeError, "boom"):
+                    self.adapter.connections.add_query(
+                        "insert into t values (1); select bad_col from t", auto_begin=False
+                    )
+
+        assert seen_on_second_statement == [True]
+
+    def test_add_query_never_clears_transaction_flag(self):
+        """The update is one-way: a statement that leaves the driver idle, such
+        as a literal commit, doesn't clear a transaction dbt is tracking."""
+        connection = self._add_query_on(
+            autocommit=False, transaction_open=True, in_transaction=False
+        )
+        assert connection.transaction_open is True
