@@ -762,6 +762,19 @@ class RedshiftConnectionManager(SQLConnectionManager):
             raise DbtRuntimeError(f"Failed to execute SQL: {sql} on connection: {conn_name}")
         return response, table
 
+    @staticmethod
+    def _track_driver_transaction(connection: Connection) -> None:
+        # With autocommit off, redshift_connector opens a transaction for any
+        # statement, including one run with auto_begin=False. Track it after
+        # each statement so that dbt commits it, or rolls it back if a later
+        # statement fails, instead of close() silently rolling it back.
+        if (
+            not connection.credentials.autocommit
+            and not connection.transaction_open
+            and getattr(connection.handle, "in_transaction", False) is True
+        ):
+            connection.transaction_open = True
+
     def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):  # type: ignore
         connection = None
         cursor = None
@@ -793,6 +806,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
                 retryable_exceptions=redshift_retryable_exceptions,
                 retry_limit=self.profile.credentials.retries,
             )
+            self._track_driver_transaction(connection)
 
         if cursor is None:
             conn = self.get_thread_connection()
