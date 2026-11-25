@@ -3,4 +3,4 @@ body: With autocommit off, track the transaction redshift_connector opens for au
 time: 2026-11-25T12:00:00.000000+00:00
 custom:
     Author: itsnamangoyal
-    Issue: "TODO"
+    Issue: "2360"
