@@ -1,5 +1,5 @@
 kind: Fixes
-body: List relations with SHOW TABLES when a table is dropped during SHOW TABLE EXTENDED, instead of treating the schema as empty and rebuilding incremental models
+body: List relations with SHOW TABLES when a table is dropped during SHOW TABLE EXTENDED, instead of treating the schema as empty and rebuilding incremental models. Tables dropped before their DESCRIBE are left out of the listing, and a DESCRIBE failure other than table-not-found (for example access denied) now fails the listing of its schema, including on the Spark 3 / Iceberg v2 path, instead of caching the table as non-Iceberg.
 time: 2026-11-24T12:00:00.000000+05:30
 custom:
     Author: ash2shukla

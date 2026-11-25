@@ -870,21 +870,28 @@ def test_describe_failure_after_show_tables_propagates(target_http):
             adapter.list_relations_without_caching(schema_relation)
 
 
-def test_describe_of_dropped_table_after_show_tables_is_tolerated(target_http):
-    """A table dropped between SHOW TABLES and DESCRIBE does not fail the listing."""
+def test_describe_of_dropped_table_after_show_tables_is_left_out(target_http):
+    """A table dropped between SHOW TABLES and DESCRIBE does not fail the listing, and is not
+    cached with empty metadata, which would record it as an existing non-Iceberg table."""
     adapter = SparkAdapter(target_http, get_context("spawn"))
     schema_relation = adapter.Relation.create(
         schema="analytics", identifier=""
     ).without_identifier()
 
-    with mock.patch.object(
-        adapter,
-        "execute_macro",
-        side_effect=_show_tables_then_describe_fails("[TABLE_OR_VIEW_NOT_FOUND] dropped"),
-    ):
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND]")
+        if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+            return [("analytics", "dropped", False), ("analytics", "kept", False)]
+        if kwargs["kwargs"]["table_name"] == "analytics.dropped":
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND] dropped")
+        return [("Provider", "iceberg", None)]
+
+    with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
         result = adapter.list_relations_without_caching(schema_relation)
 
-    assert [(r.schema, r.identifier) for r in result] == [("analytics", "my_model")]
+    assert [(r.schema, r.identifier) for r in result] == [("analytics", "kept")]
+    assert result[0].is_iceberg
 
 
 ICEBERG_V2_ERROR = "SHOW TABLE EXTENDED is not supported for v2 tables"

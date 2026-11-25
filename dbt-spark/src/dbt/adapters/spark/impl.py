@@ -180,8 +180,9 @@ class SparkAdapter(SQLAdapter):
 
         return _schema, name, information
 
-    def _get_relation_information_using_describe(self, row: "agate.Row") -> RelationInfo:
-        """Relation info fetched using SHOW TABLES and an auxiliary DESCRIBE statement"""
+    def _get_relation_information_using_describe(self, row: "agate.Row") -> Optional[RelationInfo]:
+        """Relation info fetched using SHOW TABLES and an auxiliary DESCRIBE statement.
+        Returns None if the table no longer exists, so the caller leaves it out."""
         try:
             _schema, name, _ = row
         except ValueError:
@@ -200,8 +201,10 @@ class SparkAdapter(SQLAdapter):
                 # Empty metadata would misclassify an existing table (format, type), so
                 # snapshots fail their format check and table materializations drop it.
                 raise
-            logger.debug(f"Error while retrieving information about {table_name}: {errmsg}")
-            table_results = AttrDict()
+            # The table was dropped after SHOW TABLES listed it. Caching it with empty
+            # metadata would record a relation that does not exist, as a non-Iceberg table.
+            logger.debug(f"Skipping {table_name}, dropped while listing relations: {errmsg}")
+            return None
 
         information = ""
         for info_row in table_results:
@@ -214,12 +217,15 @@ class SparkAdapter(SQLAdapter):
     def _build_spark_relation_list(
         self,
         row_list: "agate.Table",
-        relation_info_func: Callable[["agate.Row"], RelationInfo],
+        relation_info_func: Callable[["agate.Row"], Optional[RelationInfo]],
     ) -> List[BaseRelation]:
         """Aggregate relations with format metadata included."""
         relations = []
         for row in row_list:
-            _schema, name, information = relation_info_func(row)
+            relation_info = relation_info_func(row)
+            if relation_info is None:
+                continue
+            _schema, name, information = relation_info
 
             rel_type: RelationType = (
                 RelationType.View
@@ -265,6 +271,10 @@ class SparkAdapter(SQLAdapter):
                 # so a table dropped mid-statement fails the whole listing. That does not mean
                 # the schema is empty, and caching it as empty makes incremental models and
                 # snapshots rebuild. List with SHOW TABLES instead, which does not load tables.
+                logger.warning(
+                    f"SHOW TABLE EXTENDED failed for schema {schema_relation.schema} because a "
+                    f"table was dropped while listing it; listing with SHOW TABLES instead: {errmsg}"
+                )
                 try:
                     return self._list_relations_using_show_tables(kwargs)
                 except DbtRuntimeError as fallback_error:
