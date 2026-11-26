@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from io import StringIO
 from time import sleep
 
-from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING, Dict
+from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING, Dict, Type
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -29,13 +29,6 @@ from snowflake.connector.errors import (
     Error,
     DatabaseError,
     InternalError,
-    InternalServerError,
-    ServiceUnavailableError,
-    GatewayTimeoutError,
-    RequestTimeoutError,
-    BadGatewayError,
-    OtherHTTPRetryableError,
-    BindUploadError,
 )
 
 from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
@@ -117,6 +110,21 @@ REVOCATION_CHECK_MODES = ("ADVISORY", "ENABLED", "DISABLED")
 
 def _connector_major_version() -> int:
     return int(snowflake.connector.__version__.split(".")[0])
+
+
+# Connector 4.x raises these when an HTTP request made while connecting runs out of retries.
+# Connector 5.x never raises them and only keeps them as deprecated aliases: touching one emits
+# a DeprecationWarning, and a future release may remove them. So they are looked up by name,
+# and only on 4.x, instead of imported.
+_CONNECTOR_4_HTTP_ERRORS = (
+    "InternalServerError",
+    "ServiceUnavailableError",
+    "GatewayTimeoutError",
+    "RequestTimeoutError",
+    "BadGatewayError",
+    "OtherHTTPRetryableError",
+    "BindUploadError",
+)
 
 
 # The statements dbt issues, with snowflake_fail_on_unexpected_existing_relation enabled, for an
@@ -346,6 +354,27 @@ class SnowflakeCredentials(Credentials):
             # https://github.com/snowflakedb/snowflake-connector-python/issues/2213
             "ocsp_root_certs_dict_lock_timeout": 10,
         }
+
+    def connect_retryable_exceptions(self) -> List[Type[Exception]]:
+        """Exceptions that make dbt retry opening a connection, up to `connect_retries` times.
+
+        On both connector versions a failed login, network error or timeout reaches dbt as an
+        OperationalError after the connector's own retries (up to `login_timeout`), so it is not
+        retried unless `retry_on_database_errors` or `retry_all` is set. Connector 4.x also
+        raises HTTP error classes when a request other than the login request runs out of
+        retries, such as the request to an SSO identity provider; 5.x never raises them.
+        """
+        # `retry_all` and `retry_on_database_errors` are for backwards compatibility
+        if self.retry_all:
+            return [Error]
+        retryable: List[Type[Exception]] = [InternalError]
+        if _connector_major_version() < 5:
+            retryable += [
+                getattr(snowflake.connector.errors, name) for name in _CONNECTOR_4_HTTP_ERRORS
+            ]
+        if self.retry_on_database_errors:
+            retryable.insert(0, DatabaseError)
+        return retryable
 
     def auth_args(self):
         # Pull all of the optional authentication args for the connector,
@@ -614,29 +643,13 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         def exponential_backoff(attempt: int):
             return attempt * attempt
 
-        retryable_exceptions = [
-            InternalError,
-            InternalServerError,
-            ServiceUnavailableError,
-            GatewayTimeoutError,
-            RequestTimeoutError,
-            BadGatewayError,
-            OtherHTTPRetryableError,
-            BindUploadError,
-        ]
-        # these two options are for backwards compatibility
-        if creds.retry_all:
-            retryable_exceptions = [Error]
-        elif creds.retry_on_database_errors:
-            retryable_exceptions.insert(0, DatabaseError)
-
         return cls.retry_connection(
             connection,
             connect=connect,
             logger=logger,
             retry_limit=creds.connect_retries,
             retry_timeout=timeout if timeout is not None else exponential_backoff,
-            retryable_exceptions=retryable_exceptions,
+            retryable_exceptions=creds.connect_retryable_exceptions(),
         )
 
     def cancel(self, connection):

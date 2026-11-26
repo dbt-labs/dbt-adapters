@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop importing the HTTP error classes that snowflake-connector-python 5.x deprecates (`InternalServerError`, `ServiceUnavailableError` and others), which printed a DeprecationWarning for each one and would break dbt-snowflake if a later connector removes them. Connections are still retried on these errors with connector 4.x, the only version that raises them
+time: 2026-11-26T15:20:48.413108+05:30
+custom:
+    Author: aahel
+    Issue: "2347"

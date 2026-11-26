@@ -26,7 +26,11 @@ from .utils import (
     mock_connection,
     TestAdapterConversions,
     load_internal_manifest_macros,
+    ignore_connector_4_http_error_warnings,
 )
+
+# the tests patch the connector's major version to 4
+pytestmark = ignore_connector_4_http_error_warnings
 
 
 class TestSnowflakeAdapter(unittest.TestCase):

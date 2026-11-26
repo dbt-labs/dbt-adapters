@@ -13,6 +13,14 @@ import pytest
 from dbt_common.dataclass_schema import ValidationError
 from dbt.config.project import PartialProject
 
+# Tests that patch the connector's major version to 4 make dbt look up the HTTP error classes
+# that connector 5.x keeps only as deprecated aliases, so with 5.x installed the lookups warn.
+ignore_connector_4_http_error_warnings = pytest.mark.filterwarnings(
+    r"ignore:'snowflake\.connector\.errors\.(InternalServerError|ServiceUnavailableError"
+    r"|GatewayTimeoutError|RequestTimeoutError|BadGatewayError|OtherHTTPRetryableError"
+    r"|BindUploadError)' is retained only:DeprecationWarning"
+)
+
 
 def normalize(path):
     """On windows, neither is enough on its own:
