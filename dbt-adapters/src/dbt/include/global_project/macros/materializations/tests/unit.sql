@@ -36,6 +36,7 @@
   {%- endcall %}
 
   {% do adapter.drop_relation(temp_relation) %}
+  {% do adapter.commit() %}
 
   {{ return({'relations': relations}) }}
 
