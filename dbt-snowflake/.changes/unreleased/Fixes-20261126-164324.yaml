@@ -3,4 +3,4 @@ body: Bind Decimal values (e.g. seed numbers) as strings so snowflake-connector-
 time: 2026-11-26T16:43:24.000000+05:30
 custom:
     Author: tauhid621
-    Issue: ""
+    Issue: "2367"
