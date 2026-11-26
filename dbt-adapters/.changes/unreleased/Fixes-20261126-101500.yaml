@@ -2,5 +2,5 @@ kind: Fixes
 body: Commit after the unit materialization drops its temp relation, so the drop isn't rolled back on adapters where begin opens a real transaction.
 time: 2026-11-26T10:15:00.000000+05:30
 custom:
-  Author: itsnamangoyal
-  Issue: "16499"
+    Author: itsnamangoyal
+    Issue: "16499"
