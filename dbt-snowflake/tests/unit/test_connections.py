@@ -389,6 +389,34 @@ class TestSnowflakeCredentialsLogoutArgs:
             assert creds.logout_args() == expected_args
 
 
+class TestSnowflakeCredentialsTokenCacheArgs:
+    """Connector 5.x treats `client_request_mfa_token` as a deprecated alias of
+    `client_store_temporary_credential`, so dbt only passes it on 4.x"""
+
+    @pytest.mark.parametrize(
+        "connector_major_version,expect_mfa_token",
+        [(4, True), (5, False)],
+    )
+    def test_token_cache_args(self, connector_major_version, expect_mfa_token):
+        creds = connections.SnowflakeCredentials(
+            account="test_account",
+            user="test_user",
+            password="test_password",
+            database="test_db",
+            schema="test_schema",
+            authenticator="username_password_mfa",
+        )
+        with (
+            patch.object(
+                connections, "_connector_major_version", return_value=connector_major_version
+            ),
+            patch.object(creds, "_get_private_key", return_value=None),
+        ):
+            args = creds.auth_args()
+        assert args["client_store_temporary_credential"] is True
+        assert ("client_request_mfa_token" in args) is expect_mfa_token
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 
