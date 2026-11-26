@@ -51,4 +51,5 @@ class TestUnitTestCommitsTransaction:
         results = run_dbt(["test", "--select", "test_my_model"], callbacks=[capture])
         assert len(results) == 1
 
+        # The materialization commits, so release() finds no open transaction to roll back.
         assert transaction_events == ["SQLCommit"]
