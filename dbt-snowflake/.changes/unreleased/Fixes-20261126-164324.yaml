@@ -1,0 +1,6 @@
+kind: Fixes
+body: Bind Decimal values (e.g. seed numbers) as strings so snowflake-connector-python 5.x renders them quoted like 4.x, fixing seeds that contain NaN or Infinity.
+time: 2026-11-26T16:43:24.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: ""

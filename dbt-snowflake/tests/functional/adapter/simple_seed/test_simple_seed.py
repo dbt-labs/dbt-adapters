@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from dbt.tests.adapter.simple_seed.test_seed import BaseTestEmptySeed, SeedConfigBase
@@ -52,3 +54,30 @@ class TestSeedInsertOverwriteNoDataDoubling(SeedConfigBase):
             f"Expected {self.ROW_COUNT} rows after re-seed, got {count_after_second}. "
             "Data may have been doubled or wiped."
         )
+
+
+class TestSeedFloatSpecialValues(SeedConfigBase):
+    """NaN/Infinity load into an inferred float column on every connector major.
+
+    agate parses these as Decimals; connector 5.x rendered them as bare SQL tokens (invalid)
+    until dbt started binding Decimals as strings.
+    """
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "float_special_values.csv": "id,val\n1,1.5\n2,NaN\n3,Infinity\n4,-Infinity\n5,1E+3\n"
+        }
+
+    def test_seed_float_special_values(self, project):
+        assert len(run_dbt(["seed"])) == 1
+
+        rows = project.run_sql(
+            "select id, val from {schema}.float_special_values order by id", fetch="all"
+        )
+        vals = [row[1] for row in rows]
+        assert vals[0] == 1.5
+        assert math.isnan(vals[1])
+        assert vals[2] == math.inf
+        assert vals[3] == -math.inf
+        assert vals[4] == 1000.0

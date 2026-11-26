@@ -574,3 +574,45 @@ def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_an
         "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
         in str(excinfo)
     )
+
+
+class TestAddQueryBindings:
+    """Decimal bindings are passed to the connector as strings: connector 4.x quotes
+    Decimals in client-side binding, 5.x renders them bare (NaN/Infinity -> invalid SQL)"""
+
+    def _bindings_sent(self, bindings):
+        manager = connections.SnowflakeConnectionManager.__new__(
+            connections.SnowflakeConnectionManager
+        )
+        with patch.object(
+            manager, "_add_standard_queries", return_value=(Mock(), Mock())
+        ) as add_standard:
+            manager.add_query("insert into t values (%s, %s, %s, %s, %s)", bindings=bindings)
+        return add_standard.call_args.kwargs["bindings"]
+
+    def test_decimals_are_bound_as_strings(self):
+        from decimal import Decimal
+
+        sent = self._bindings_sent(
+            [
+                Decimal("1.5"),
+                Decimal("NaN"),
+                Decimal("Infinity"),
+                Decimal("-Infinity"),
+                Decimal("1E+3"),
+            ]
+        )
+        assert sent == ("1.5", "NaN", "Infinity", "-Infinity", "1E+3")
+
+    def test_decimals_inside_list_bindings_are_bound_as_strings(self):
+        from decimal import Decimal
+
+        sent = self._bindings_sent([[Decimal("1"), Decimal("NaN"), 3], "a"])
+        assert sent == (["1", "NaN", 3], "a")
+
+    def test_other_types_are_unchanged(self):
+        import datetime
+
+        ts = datetime.datetime(2024, 1, 2, 3, 4, 5)
+        sent = self._bindings_sent(iter([1, 2.5, "a", None, ts]))
+        assert sent == (1, 2.5, "a", None, ts)
