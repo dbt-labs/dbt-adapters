@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Replace the deprecated `snowflake.connector.network.WORKLOAD_IDENTITY_AUTHENTICATOR` import with the `"WORKLOAD_IDENTITY"` string literal, which works on both snowflake-connector-python 4.x and 5.x
+time: 2026-11-26T13:51:29.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "2364"
