@@ -1,0 +1,6 @@
+kind: Fixes
+body: Register the `models` and `snapshots` overrides in `BaseCloneSameSourceAndTarget` as class-scoped fixtures so the same-source clone test runs against its intended project
+time: 2026-11-24T19:20:00.000000+00:00
+custom:
+    Author: delasy
+    Issue: "2334"
