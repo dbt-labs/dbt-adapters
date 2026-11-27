@@ -173,6 +173,8 @@
 
   {% do persist_docs(target_relation, model) %}
 
+  {{ bigquery__persist_row_access_policy(target_relation, model) }}
+
   {%- if tmp_relation_exists -%}
     {{ adapter.drop_relation(tmp_relation) }}
   {%- endif -%}
