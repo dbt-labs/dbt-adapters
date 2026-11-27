@@ -51,7 +51,11 @@ union all
 {% macro get_expected_sql(rows, column_name_to_data_types, column_name_to_quoted) %}
 
 {%- if (rows | length) == 0 -%}
-    select * from dbt_internal_unit_test_actual
+    select
+    {%- for column_name, column_type in column_name_to_data_types.items() %}
+        {{ safe_cast("null", column_type) | trim }} as {{ column_name_to_quoted[column_name] }}
+        {%- if not loop.last -%},{%- endif %}
+    {%- endfor %}
     limit 0
 {%- else -%}
 {%- for row in rows -%}

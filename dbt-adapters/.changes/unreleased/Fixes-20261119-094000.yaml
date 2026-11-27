@@ -1,0 +1,6 @@
+kind: Fixes
+body: Avoid planning a model twice when a unit test expects zero rows by generating a typed empty expected relation.
+time: 2026-11-19T09:40:00.000000+01:00
+custom:
+  Author: Auric-Manteo
+  Issue: "2342"
