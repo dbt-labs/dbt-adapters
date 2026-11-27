@@ -6,7 +6,13 @@ from dbt.tests.adapter.query_comment.test_query_comment import (
     BaseMacroInvalidQueryComments,
     BaseNullQueryComments,
     BaseEmptyQueryComments,
+    BaseDefaultQueryComments,
 )
+
+MODELS__COLUMN_SCHEMA_FROM_QUERY_SQL = """
+{% do adapter.get_column_schema_from_query('select 1 as id') %}
+select 1 as outer_id
+"""
 
 
 class TestQueryCommentsSnowflake(BaseQueryComments):
@@ -42,3 +48,26 @@ class TestNullQueryCommentsSnowflake(BaseNullQueryComments):
 
 class TestEmptyQueryCommentsSnowflake(BaseEmptyQueryComments):
     pass
+
+
+class TestSelectQueryCommentAddedOnceSnowflake(BaseDefaultQueryComments):
+    """
+    get_column_schema_from_query goes through add_select_query, which used to add the
+    query comment on top of the one add_standard_query adds to every statement.
+    https://github.com/dbt-labs/dbt-adapters/issues/688
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "x.sql": MODELS__COLUMN_SCHEMA_FROM_QUERY_SQL,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"query-comment": {"comment": "dbt\nrules!\n", "append": True}}
+
+    def test_comment_added_once(self, project):
+        logs = self.run_get_json()
+        assert r"select 1 as id\n/* dbt\nrules! */" in logs
+        assert r"/* dbt\nrules! */\n/* dbt\nrules! */" not in logs
