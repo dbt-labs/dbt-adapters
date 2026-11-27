@@ -96,6 +96,20 @@ class TestForceBatchInsertParam:
         assert models_records_count == 212
 
 
+class TestForceBatchExternalLocation(TestForceBatchInsertParam):
+    @pytest.fixture(scope="class")
+    def models(self):
+        external_location_config = """
+{{ config(external_location=(
+    target.s3_staging_dir.rstrip('/')
+    ~ '/dbt-adapters-tests/'
+    ~ target.schema
+    ~ '/force_batch'
+)) }}
+"""
+        return {"force_batch.sql": external_location_config + models__force_batch_sql}
+
+
 class TestAppendForceBatch:
     @pytest.fixture(scope="class")
     def models(self):
