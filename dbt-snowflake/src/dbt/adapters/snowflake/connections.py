@@ -1,5 +1,6 @@
 import base64
 import datetime
+import decimal
 import os
 import sys
 
@@ -161,6 +162,19 @@ def _create_or_alter_hint(msg: str, sql: Optional[str]) -> Optional[str]:
     if "transient" in message:
         return CREATE_OR_ALTER_TRANSIENT_HINT
     return CREATE_OR_ALTER_FAILURE_HINT
+
+
+def _decimal_binding_to_str(value: Any) -> Any:
+    """Bind Decimals as strings, including inside list (IN-clause) bindings.
+
+    Connector 4.x quotes Decimals in client-side binding ('1.5'); 5.x renders them bare,
+    which turns NaN/Infinity into invalid SQL. Passing str keeps both majors identical.
+    """
+    if isinstance(value, decimal.Decimal):
+        return str(value)
+    if isinstance(value, list):
+        return [_decimal_binding_to_str(v) for v in value]
+    return value
 
 
 @cache
@@ -772,7 +786,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         if bindings:
             # The snowflake connector is stricter than, e.g., psycopg2 -
             # which allows any iterable thing to be passed as a binding.
-            bindings = tuple(bindings)
+            # Decimals (e.g. agate seed values) are bound as strings; see _decimal_binding_to_str.
+            bindings = tuple(_decimal_binding_to_str(b) for b in bindings)
 
         stripped_queries = self._stripped_queries(sql)
 
