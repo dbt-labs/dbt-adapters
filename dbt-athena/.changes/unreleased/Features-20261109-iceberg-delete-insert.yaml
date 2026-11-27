@@ -1,0 +1,6 @@
+kind: Features
+body: 'Support the delete+insert incremental strategy on Iceberg tables. It follows dbt''s default delete+insert semantics (unique_key may be a scope with many rows per key; incremental_predicates filter the target rows to delete) and runs as a single MERGE, so a run is one Iceberg commit and readers never see the replaced keys missing. With force_batch, or above the per-query partition limit, it falls back to a DELETE followed by batched INSERTs.'
+time: 2026-11-09T12:00:00.000000+00:00
+custom:
+    Author: danielmontalbano
+    Issue: "2302"
