@@ -1,0 +1,6 @@
+kind: Fixes
+body: Emit COPY GRANTS before the ROW ACCESS POLICY and TAG clauses in dynamic table and Iceberg table DDL
+time: 2026-11-09T06:26:47.037835-05:00
+custom:
+    Author: DG47
+    Issue: "1960"
