@@ -1,0 +1,6 @@
+kind: Features
+body: Add base test classes checking that run-operation keeps its writes and rolls back on failure
+time: 2026-11-26T15:37:27.000000+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""
