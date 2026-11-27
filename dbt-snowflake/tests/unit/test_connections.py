@@ -1,13 +1,19 @@
 import os
 import pytest
 import logging
+import warnings
 from importlib import reload
 from unittest.mock import Mock, patch, call
 import multiprocessing
+import snowflake.connector.errors
+from snowflake.connector.errors import DatabaseError, Error, InternalError
+from dbt.adapters.contracts.connection import Connection
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
+
+from .utils import ignore_connector_4_http_error_warnings
 
 
 class TestSnowflakeLogging:
@@ -387,6 +393,102 @@ class TestSnowflakeCredentialsLogoutArgs:
             connections, "_connector_major_version", return_value=connector_major_version
         ):
             assert creds.logout_args() == expected_args
+
+
+@ignore_connector_4_http_error_warnings
+class TestSnowflakeConnectRetryableExceptions:
+    """Connector 5.x never raises the HTTP error classes that 4.x raises while connecting, and
+    touching them emits a DeprecationWarning, so dbt only retries on them with 4.x"""
+
+    HTTP_ERROR_NAMES = (
+        "InternalServerError",
+        "ServiceUnavailableError",
+        "GatewayTimeoutError",
+        "RequestTimeoutError",
+        "BadGatewayError",
+        "OtherHTTPRetryableError",
+        "BindUploadError",
+    )
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "schema": "test_schema",
+        }
+
+    @classmethod
+    def http_errors(cls):
+        return [getattr(snowflake.connector.errors, name) for name in cls.HTTP_ERROR_NAMES]
+
+    @pytest.mark.parametrize("connector_major_version", [4, 5])
+    @pytest.mark.parametrize(
+        "profile_settings,expected_leading",
+        [
+            ({}, [InternalError]),
+            ({"retry_on_database_errors": True}, [DatabaseError, InternalError]),
+        ],
+        ids=["default", "retry_on_database_errors"],
+    )
+    def test_retryable_exceptions(
+        self, base_credentials, connector_major_version, profile_settings, expected_leading
+    ):
+        creds = connections.SnowflakeCredentials(**base_credentials, **profile_settings)
+        with patch.object(
+            connections, "_connector_major_version", return_value=connector_major_version
+        ):
+            retryable = creds.connect_retryable_exceptions()
+        expected_http_errors = self.http_errors() if connector_major_version == 4 else []
+        assert retryable == expected_leading + expected_http_errors
+
+    @pytest.mark.parametrize("connector_major_version", [4, 5])
+    def test_retry_all(self, base_credentials, connector_major_version):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, retry_all=True, retry_on_database_errors=True
+        )
+        with patch.object(
+            connections, "_connector_major_version", return_value=connector_major_version
+        ):
+            assert creds.connect_retryable_exceptions() == [Error]
+
+    def test_connector_5_does_not_touch_deprecated_errors(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        with patch.object(connections, "_connector_major_version", return_value=5):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                creds.connect_retryable_exceptions()
+
+    def test_deprecated_errors_are_not_imported(self):
+        for name in self.HTTP_ERROR_NAMES:
+            assert not hasattr(connections, name)
+
+    @pytest.mark.parametrize(
+        "connector_major_version,error_name",
+        [(4, "ServiceUnavailableError"), (5, "InternalError")],
+    )
+    def test_open_retries(self, base_credentials, connector_major_version, error_name):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, connect_retries=1, connect_timeout=0
+        )
+        connection = Connection(type="snowflake", name="test", credentials=creds)
+        handle = Mock()
+        error = getattr(snowflake.connector.errors, error_name)(msg="transient")
+        with (
+            patch.object(
+                connections, "_connector_major_version", return_value=connector_major_version
+            ),
+            patch.object(connections, "get_record_mode_from_env", return_value=None),
+            patch.object(
+                connections.snowflake.connector, "connect", side_effect=[error, handle]
+            ) as connect,
+        ):
+            connections.SnowflakeConnectionManager.open(connection)
+        assert connect.call_count == 2
+        assert connection.state == "open"
+        assert connection.handle is handle
 
 
 class TestSnowflakeCredentialsPATAuth:
