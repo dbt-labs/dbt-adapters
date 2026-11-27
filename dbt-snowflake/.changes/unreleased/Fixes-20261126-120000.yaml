@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop passing `client_request_mfa_token` on snowflake-connector-python 5.x, where it is a deprecated alias of `client_store_temporary_credential`
+time: 2026-11-26T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "2293"

@@ -433,8 +433,10 @@ class SnowflakeCredentials(Credentials):
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
-            # enable mfa token cache for linux
-            result["client_request_mfa_token"] = True
+            # enable mfa token cache for linux; 5.x folds it into the option above and
+            # warns that it is deprecated
+            if _connector_major_version() < 5:
+                result["client_request_mfa_token"] = True
         # `reuse_connections` is not passed: it is dbt's own pooling switch (see
         # `SnowflakeConnectionManager.release`), not a connector option. Connector 5.x
         # warns about unknown options, and rejects them outright when they are None.
