@@ -10,6 +10,7 @@ from dbt.adapters.spark import SparkAdapter, SparkColumn, SparkRelation
 from dbt.adapters.spark.connections import build_ssl_transport
 from dbt.adapters.spark.impl import (
     LIST_RELATIONS_MACRO_NAME,
+    LIST_RELATIONS_SHOW_TABLES_MACRO_NAME,
     SCHEMA_NOT_FOUND_MESSAGES,
     TABLE_OR_VIEW_NOT_FOUND_MESSAGES,
 )
@@ -797,6 +798,100 @@ def test_all_table_or_view_not_found_messages_return_empty(not_found_msg, target
     ):
         result = adapter.list_relations_without_caching(schema_relation)
         assert result == []
+
+
+def test_table_dropped_during_show_table_extended_falls_back_to_show_tables(target_http):
+    """On Spark 4 with Iceberg, SHOW TABLE EXTENDED loads every table in the schema, so a
+    table dropped mid-statement fails it with TABLE_OR_VIEW_NOT_FOUND. The schema is not
+    empty, so the adapter must list it with SHOW TABLES rather than return []."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+    show_tables_rows = [("analytics", "my_model", False)]
+
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError(
+                "[TABLE_OR_VIEW_NOT_FOUND] The table or view `analytics`.`dropped` was not found."
+            )
+        if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+            return show_tables_rows
+        return []
+
+    with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+        result = adapter.list_relations_without_caching(schema_relation)
+
+    assert [(r.schema, r.identifier) for r in result] == [("analytics", "my_model")]
+
+
+def test_table_or_view_not_found_fallback_error_propagates(target_http):
+    """An unexpected error from the SHOW TABLES fallback must not be read as an empty schema."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND]")
+        raise DbtRuntimeError("Connection to Hive Metastore failed")
+
+    with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+        with pytest.raises(DbtRuntimeError):
+            adapter.list_relations_without_caching(schema_relation)
+
+
+def _show_tables_then_describe_fails(describe_error):
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND]")
+        if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+            return [("analytics", "my_model", False)]
+        raise DbtRuntimeError(describe_error)
+
+    return execute_macro_side_effect
+
+
+def test_describe_failure_after_show_tables_propagates(target_http):
+    """SHOW TABLES succeeding while DESCRIBE fails with a metastore or permission error must
+    not cache empty metadata, which would misclassify an existing table."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=_show_tables_then_describe_fails("Permission denied on analytics.my_model"),
+    ):
+        with pytest.raises(DbtRuntimeError):
+            adapter.list_relations_without_caching(schema_relation)
+
+
+def test_describe_of_dropped_table_after_show_tables_is_left_out(target_http):
+    """A table dropped between SHOW TABLES and DESCRIBE does not fail the listing, and is not
+    cached with empty metadata, which would record it as an existing non-Iceberg table."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="analytics", identifier=""
+    ).without_identifier()
+
+    def execute_macro_side_effect(macro_name, *args, **kwargs):
+        if macro_name == LIST_RELATIONS_MACRO_NAME:
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND]")
+        if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+            return [("analytics", "dropped", False), ("analytics", "kept", False)]
+        if kwargs["kwargs"]["table_name"] == "analytics.dropped":
+            raise DbtRuntimeError("[TABLE_OR_VIEW_NOT_FOUND] dropped")
+        return [("Provider", "iceberg", None)]
+
+    with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+        result = adapter.list_relations_without_caching(schema_relation)
+
+    assert [(r.schema, r.identifier) for r in result] == [("analytics", "kept")]
+    assert result[0].is_iceberg
 
 
 ICEBERG_V2_ERROR = "SHOW TABLE EXTENDED is not supported for v2 tables"
