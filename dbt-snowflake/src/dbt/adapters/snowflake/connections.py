@@ -38,8 +38,6 @@ from snowflake.connector.errors import (
     BindUploadError,
 )
 
-from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
-
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -402,7 +400,7 @@ class SnowflakeCredentials(Credentials):
                 result["token"] = self.token
 
             elif self.authenticator.lower() == "workload_identity":
-                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+                result["authenticator"] = "WORKLOAD_IDENTITY"
 
                 if (
                     not self.workload_identity_provider
