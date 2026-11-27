@@ -155,9 +155,14 @@ class SnowflakeRelation(BaseRelation):
                 )
             )
 
-        if (
+        # A desired AUTO matches whatever concrete mode Snowflake resolved it to, except
+        # CUSTOM_INCREMENTAL, which AUTO only resolves to with REFRESH USING, so a desired AUTO
+        # against a live CUSTOM_INCREMENTAL table is a switch from a custom incremental to a
+        # regular dynamic table.
+        # https://docs.snowflake.com/en/user-guide/dynamic-tables/modify#refresh-mode-transitions
+        if new_dynamic_table.refresh_mode != existing_dynamic_table.refresh_mode and (
             new_dynamic_table.refresh_mode != RefreshMode.AUTO
-            and new_dynamic_table.refresh_mode != existing_dynamic_table.refresh_mode
+            or existing_dynamic_table.refresh_mode == RefreshMode.CUSTOM_INCREMENTAL
         ):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
