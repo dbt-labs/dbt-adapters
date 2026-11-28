@@ -186,6 +186,45 @@ class BaseCloneNotPossible(BaseClone):
         assert all("no-op" in r.message.lower() for r in results)
 
 
+class BaseCloneViewChangedContract(BaseClone):
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "view_model.sql": fixtures.contracted_view_model_sql,
+            "schema.yml": fixtures.contracted_view_schema_yml,
+        }
+
+    def test_clone_view_with_changed_contract(self, project, unique_schema, other_schema):
+        project.create_test_schema(other_schema)
+
+        results = run_dbt(["seed"])
+        assert len(results) == 1
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        self.copy_state(project.project_root)
+
+        # Change the enforced contract after the deferred state was saved,
+        # so the deferred columns no longer match the contract. Clone reuses
+        # the view materialization, which would assert the new contract
+        # against `select * from <deferred relation>` and fail.
+        schema_path = os.path.join(project.project_root, "models", "schema.yml")
+        with open(schema_path, "w") as schema_file:
+            schema_file.write(fixtures.contracted_view_changed_schema_yml)
+
+        results = run_dbt(["clone", "--state", "state", "--target", "otherschema"])
+        assert len(results) == 1
+
+        schema_relations = project.adapter.list_relations(
+            database=project.database, schema=other_schema
+        )
+        assert len(schema_relations) == 1
+        assert schema_relations[0].type == "view"
+
+        # The contract is still enforced on a normal build.
+        _, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert "contract" in output.lower()
+
+
 class BaseCloneSameSourceAndTarget(BaseClone):
     def models(self):
         return {

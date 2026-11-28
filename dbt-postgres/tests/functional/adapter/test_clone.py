@@ -4,6 +4,7 @@ from dbt.tests.adapter.dbt_clone.test_dbt_clone import (
     BaseCloneNotPossible,
     BaseClonePossible,
     BaseCloneSameTargetAndState,
+    BaseCloneViewChangedContract,
 )
 
 
@@ -17,4 +18,8 @@ class TestBaseClonePossible(BaseClonePossible):
 
 
 class TestCloneSameTargetAndState(BaseCloneSameTargetAndState):
+    pass
+
+
+class TestCloneViewChangedContract(BaseCloneViewChangedContract):
     pass
