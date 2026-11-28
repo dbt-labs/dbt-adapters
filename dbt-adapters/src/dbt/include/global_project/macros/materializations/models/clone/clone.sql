@@ -24,24 +24,32 @@
   {% set can_clone_table = can_clone_table() %}
   {%- set grant_config = config.get('grants') -%}
 
-  {%- if other_existing_relation and other_existing_relation.type == 'table' and can_clone_table -%}
+  {%- set use_native_clone = other_existing_relation and other_existing_relation.type == 'table' and can_clone_table -%}
+  {%- set target_relation = this.incorporate(type='table') if use_native_clone else this.incorporate(type='view') -%}
 
-      {%- set target_relation = this.incorporate(type='table') -%}
+  -- Cloning a relation onto itself is a no-op whether the adapter clones tables
+  -- natively or falls back to a view, so check this before choosing how to clone.
+  {% if target_relation.database == defer_relation.database and
+        target_relation.schema == defer_relation.schema and
+        target_relation.identifier == defer_relation.identifier %}
+    {{ log("Target relation and defer relation are the same, skipping clone for relation: " ~ target_relation.render()) }}
+    {% set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) %}
+    {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
+    {% do persist_docs(target_relation, model) %}
+    {{ return({'relations': [target_relation]}) }}
+  {%- endif -%}
+
+  {%- if use_native_clone -%}
+
       {% if existing_relation is not none and not existing_relation.is_table %}
         {{ log("Dropping relation " ~ existing_relation.render() ~ " because it is of type " ~ existing_relation.type) }}
         {{ drop_relation_if_exists(existing_relation) }}
       {% endif %}
 
       -- as a general rule, data platforms that can clone tables can also do atomic 'create or replace'
-      {% if target_relation.database == defer_relation.database and
-            target_relation.schema == defer_relation.schema and
-            target_relation.identifier == defer_relation.identifier %}
-        {{ log("Target relation and defer relation are the same, skipping clone for relation: " ~ target_relation.render()) }}
-      {% else %}
-        {% call statement('main') %}
-            {{ create_or_replace_clone(target_relation, defer_relation) }}
-        {% endcall %}
-      {% endif %}
+      {% call statement('main') %}
+          {{ create_or_replace_clone(target_relation, defer_relation) }}
+      {% endcall %}
       {% set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) %}
       {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
       {% do persist_docs(target_relation, model) %}
@@ -49,8 +57,6 @@
       {{ return({'relations': [target_relation]}) }}
 
   {%- else -%}
-
-      {%- set target_relation = this.incorporate(type='view') -%}
 
       -- reuse the view materialization
       -- TODO: support actual dispatch for materialization macros
